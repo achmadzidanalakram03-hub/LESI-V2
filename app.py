@@ -204,7 +204,7 @@ if menu == "Dashboard":
     st.markdown("<h4>Modul Analisis Citra Klinis</h4>", unsafe_allow_html=True)
     
     # Menambahkan antarmuka Tab untuk memilih antara Galeri atau Kamera Langsung (Depan/Belakang)
-    tab_unggah, tab_kamera = st.tabs(["📁 Unggah Galeri", "📸 Kamera Langsung"])
+    tab_unggah, tab_kamera = st.tabs(["Upload", "Kamera"])
     
     image = None # Variabel penampung citra
     
