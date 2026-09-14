@@ -145,8 +145,8 @@ with st.sidebar:
     
     st.markdown("---")
     st.markdown("<strong>User Profile</strong>", unsafe_allow_html=True)
-    st.markdown("<p style='margin:0;'>👨‍⚕️ drg. Adinara Savero, S.KG</p>", unsafe_allow_html=True)
-    st.markdown("<p style='color:#5B65DC; font-size:0.8rem;'>Status: Clinical Clerkship (Aktif)</p>", unsafe_allow_html=True)
+    st.markdown("<p style='margin:0;'>Adinara Savero, S.KG</p>", unsafe_allow_html=True)
+    st.markdown("<p style='color:#5B65DC; font-size:0.8rem;'>Status: Mahasiswa FKG(AKTIF)</p>", unsafe_allow_html=True)
 
 # --- KONTEN UTAMA ---
 if menu == "Dashboard":
