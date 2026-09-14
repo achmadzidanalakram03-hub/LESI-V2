@@ -202,11 +202,24 @@ if menu == "Dashboard":
     st.markdown("---")
 
     st.markdown("<h4>Modul Analisis Citra Klinis</h4>", unsafe_allow_html=True)
-    uploaded_file = st.file_uploader("Sentuh area ini untuk mengambil/memilih foto dari galeri HP Anda", type=["jpg", "jpeg", "png"])
+    
+    # Menambahkan antarmuka Tab untuk memilih antara Galeri atau Kamera Langsung (Depan/Belakang)
+    tab_unggah, tab_kamera = st.tabs(["📁 Unggah Galeri", "📸 Kamera Langsung"])
+    
+    image = None # Variabel penampung citra
+    
+    with tab_unggah:
+        uploaded_file = st.file_uploader("Pilih foto intraoral dari penyimpanan perangkat", type=["jpg", "jpeg", "png"])
+        if uploaded_file is not None:
+            image = Image.open(uploaded_file).convert('RGB')
+            
+    with tab_kamera:
+        camera_file = st.camera_input("Ambil gambar lesi secara langsung (Gunakan ikon rotate kamera bawaan HP untuk opsi depan/belakang)")
+        if camera_file is not None:
+            image = Image.open(camera_file).convert('RGB')
 
-    if uploaded_file is not None:
-        image = Image.open(uploaded_file).convert('RGB')
-        
+    # Mengeksekusi penanganan citra jika gambar sudah tersedia dari salah satu sumber
+    if image is not None:
         st.markdown("<br>", unsafe_allow_html=True)
         # gap="large" memberikan ruang nafas antar kolom di desktop, dan jarak vertikal saat ditumpuk di mobile
         col_img1, col_img2 = st.columns(2, gap="large")
