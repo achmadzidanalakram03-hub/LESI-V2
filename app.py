@@ -239,7 +239,7 @@ if not st.session_state.logged_in:
             <div class="login-card">
                 <div style="text-align: center; margin-bottom: 30px;">
                     <div style="width: 48px; height: 48px; background: {PRIMARY_LIGHT}; color: {PRIMARY}; border-radius: 14px; display: inline-flex; align-items: center; justify-content: center; font-size: 24px; font-weight: bold; margin-bottom: 15px;">✦</div>
-                    <h2 style="margin: 0; color: {DARK_TEXT}; font-weight: 800; font-size: 1.5rem;">RSGM Unjani</h2>
+                    <h2 style="margin: 0; color: {DARK_TEXT}; font-weight: 800; font-size: 1.5rem;">RSGM UNJANI</h2>
                     <p style="margin: 5px 0 0 0; color: {GRAY_TEXT}; font-size: 0.9rem;">Clinical Intelligence Workspace</p>
                 </div>
     """, unsafe_allow_html=True)
@@ -253,7 +253,7 @@ if not st.session_state.logged_in:
             st.markdown(f"<br><label style='font-size: 0.85rem; font-weight: 600; color: {DARK_TEXT};'>Password</label>", unsafe_allow_html=True)
             pass_input = st.text_input("Pass", label_visibility="collapsed", type="password", placeholder="••••••••")
             
-            submit_btn = st.form_submit_button("Masuk ke Sistem")
+            submit_btn = st.form_submit_button("LOGIN")
             
             if submit_btn:
                 if user_input.lower().strip() == OPERATOR_ID and pass_input == OPERATOR_PASS:
