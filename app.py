@@ -392,7 +392,7 @@ if menu == "Dashboard":
         <div style="background-color: #fffbeb; border: 1px solid #fde68a; border-left: 4px solid #f59e0b; padding: 16px; border-radius: 12px; margin-bottom: 24px; display: flex; gap: 12px;">
             <span style="font-size: 1.2rem;">⚠️</span>
             <p style="margin: 0; color: #78350f; font-size: 0.95rem; font-weight: 500;">
-                <strong>Disclaimer Eksplisit:</strong> Alat bantu skrining (Demo AI) ini BUKAN diagnosis definitif. Keputusan medis tetap berada pada dokter gigi.
+                <strong>Disclaimer Eksplisit:</strong> Web ini hanya alat bantu skrining. Keputusan diagnosis tetap berada pada dokter .
             </p>
         </div>
     """, unsafe_allow_html=True)
@@ -402,7 +402,7 @@ if menu == "Dashboard":
     st.markdown("""
         <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 15px;">
             <div style="width: 32px; height: 32px; background: #e0f2fe; color: #0284c7; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1rem;">📋</div>
-            <h3 style="margin: 0; font-size: 1.2rem;">Pengisian Anamnesis (OLD CARTS)</h3>
+            <h3 style="margin: 0; font-size: 1.2rem;">Anamnesis (OLD CARTS)</h3>
         </div>
         <p style="font-size: 0.9rem; margin-bottom: 20px;">Lengkapi data anamnesis sebelum melakukan skrining visual agar AI dapat memberikan pertimbangan suspek diagnosis.</p>
     """, unsafe_allow_html=True)
@@ -420,7 +420,7 @@ if menu == "Dashboard":
             t_val = st.text_input("Timing (T)", placeholder="Kapan biasanya memburuk (pagi/malam)?")
             s_val = st.slider("Severity (S) - Skala Nyeri 1-10", 0, 10, 0)
         
-        if st.form_submit_button("Simpan Data Anamnesis"):
+        if st.form_submit_button("Simpan Data"):
             st.session_state.anamnesis_data = {
                 "O_Onset": o_val or "-", "L_Location": l_val or "-", "D_Duration": d_val or "-", 
                 "C_Character": c_val or "-", "A_Aggravating": a_val or "-", "R_Relieving": r_val or "-", 
@@ -435,7 +435,7 @@ if menu == "Dashboard":
     st.markdown("""
         <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 15px;">
             <div style="width: 32px; height: 32px; background: #fce7f3; color: #be185d; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1rem;">📸</div>
-            <h3 style="margin: 0; font-size: 1.2rem;">Modul Akuisisi Gambar</h3>
+            <h3 style="margin: 0; font-size: 1.2rem;">Deteksi Foto Klinis</h3>
         </div>
     """, unsafe_allow_html=True)
     
