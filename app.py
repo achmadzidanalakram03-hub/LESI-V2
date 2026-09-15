@@ -248,7 +248,7 @@ if not st.session_state.logged_in:
     with col_login:
         with st.form("login_form"):
             st.markdown(f"<label style='font-size: 0.85rem; font-weight: 600; color: {DARK_TEXT};'>Email / ID Operator</label>", unsafe_allow_html=True)
-            user_input = st.text_input("ID", label_visibility="collapsed", placeholder="contoh: adinara savero")
+            user_input = st.text_input("ID", label_visibility="collapsed", placeholder="example: adinara savero")
             
             st.markdown(f"<br><label style='font-size: 0.85rem; font-weight: 600; color: {DARK_TEXT};'>Password</label>", unsafe_allow_html=True)
             pass_input = st.text_input("Pass", label_visibility="collapsed", type="password", placeholder="••••••••")
@@ -264,8 +264,8 @@ if not st.session_state.logged_in:
         
         st.markdown(f"""
             <div style="margin-top: 20px; text-align: center; background: #f8fafc; padding: 12px; border-radius: 12px; border: 1px dashed #cbd5e1;">
-                <p style="margin: 0; font-size: 0.8rem; font-weight: 600; color: {PRIMARY};">Akses Demo AI</p>
-                <p style="margin: 0; font-size: 0.75rem; color: {GRAY_TEXT};">ID: adinara savero | Pass: 2560171013</p>
+                <p style="margin: 0; font-size: 0.8rem; font-weight: 600; color: {PRIMARY};">ABOUT</p>
+                <p style="margin: 0; font-size: 0.75rem; color: {GRAY_TEXT};">Instagram: @henri.hartman | @a.narasavero </p>
             </div>
         """, unsafe_allow_html=True)
     
