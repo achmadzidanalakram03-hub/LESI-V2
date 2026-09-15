@@ -22,7 +22,7 @@ except ImportError:
 # ============================================================
 # KONFIGURASI GLOBAL & DATABASE
 # ============================================================
-APP_VERSION = "4.0 (Enterprise UI)"
+APP_VERSION = "4.1 (Enterprise UI & Bug Fix)"
 CLINIC_NAME = "RSGM Unjani"
 USER_ROLE = "Clinical Clerkship (Koas Aktif)"
 
@@ -42,13 +42,14 @@ DB_COLUMNS = [
 C_PURPLE = "#A163F7"
 C_BLUE   = "#6F88FC"
 C_CYAN   = "#45E3FF"
-C_CREAM  = "#F9FAFB" # Menggunakan putih tulang/cream cerah untuk kontras 
+C_CREAM  = "#F9FAFB" 
 
 # Palet Fungsional
 BG_MAIN       = "#F4F7F9"
-BG_SIDEBAR    = "#1A1D2D" # Warna gelap ala referensi sidebar
+BG_SIDEBAR    = "#1A1D2D" 
 TEXT_DARK     = "#1E293B"
 TEXT_MUTED    = "#64748B"
+BORDER_COLOR  = "#E2E8F0" # [PERBAIKAN ERROR]: Variabel dikembalikan agar tidak terjadi NameError
 
 LESION_INFO = {
     "cheek biting": {"nama_klinis": "Morsicatio Buccarum", "deskripsi": "Lesi traumatik akibat gigitan berulang pada mukosa pipi.", "rekomendasi": "Edukasi hilangkan habit; evaluasi 2 minggu.", "urgensi": "Rendah"},
@@ -266,12 +267,12 @@ st.markdown(f"""
     p, label {{ color: {TEXT_MUTED}; }}
     
     /* STYLING SIDEBAR (DARK MODERN ALA REFERENSI) */
-    [data-testid="stSidebar"] {{ 
+    section[data-testid="stSidebar"] {{ 
         background-color: {BG_SIDEBAR} !important; 
         border-right: none !important;
     }}
-    [data-testid="stSidebar"] * {{ color: #94A3B8 !important; }} /* Warna teks standar sidebar */
-    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {{ color: #FFFFFF !important; }}
+    section[data-testid="stSidebar"] * {{ color: #94A3B8 !important; }} 
+    section[data-testid="stSidebar"] h1, section[data-testid="stSidebar"] h2, section[data-testid="stSidebar"] h3 {{ color: #FFFFFF !important; }}
     
     /* Styling Radio Button agar mirip Navigasi Menu */
     div.row-widget.stRadio > div {{ gap: 8px; }}
@@ -300,7 +301,7 @@ st.markdown(f"""
     /* KARTU KONTEN / WIDGET */
     .glass-card {{
         background: #FFFFFF;
-        border: 1px solid #E2E8F0;
+        border: 1px solid {BORDER_COLOR};
         border-radius: 16px;
         padding: 24px;
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
@@ -382,7 +383,7 @@ if menu == "Dashboard Skrining":
         st.markdown(f"<h1 style='margin-bottom: 5px; color: {TEXT_DARK};'>Skrining Lesi Oral</h1>", unsafe_allow_html=True)
         st.markdown(f"<p style='font-size: 1.05rem; margin-top: 0;'>Sintesis keluhan subyektif (OLD CARTS) dan inferensi visual YOLO.</p>", unsafe_allow_html=True)
     with col_hdr2:
-        st.markdown(f"<div style='text-align: right; margin-top: 15px;'><span style='background: white; border: 1px solid #E2E8F0; padding: 8px 16px; border-radius: 20px; font-weight: 600; color: {C_BLUE};'>{datetime.now().strftime('%d %b %Y')}</span></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='text-align: right; margin-top: 15px;'><span style='background: white; border: 1px solid {BORDER_COLOR}; padding: 8px 16px; border-radius: 20px; font-weight: 600; color: {C_BLUE};'>{datetime.now().strftime('%d %b %Y')}</span></div>", unsafe_allow_html=True)
 
     # --- ANAMNESIS ---
     st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
@@ -462,7 +463,7 @@ if menu == "Dashboard Skrining":
                     for n_lesi, conf in detections:
                         all_new_records.append({"ID": str(uuid.uuid4())[:8], "Waktu": datetime.now().strftime("%H:%M:%S"), "Tanggal": datetime.now().strftime("%Y-%m-%d"), "Lesi_Terdeteksi": n_lesi, "Confidence": round(conf, 4), "Nama_File": f_name, **anamnesis, "Suspek_Diagnosis": sintesis_akhir})
 
-                st.markdown(f"<h4 style='margin-top: 30px; padding-top: 20px; border-top: 1px solid #E2E8F0;'>Dokumen EMR: {f_name}</h4>", unsafe_allow_html=True)
+                st.markdown(f"<h4 style='margin-top: 30px; padding-top: 20px; border-top: 1px solid {BORDER_COLOR};'>Dokumen EMR: {f_name}</h4>", unsafe_allow_html=True)
                 col_img1, col_img2 = st.columns(2)
                 with col_img1:
                     st.markdown("<p style='font-size: 0.85rem; font-weight: 600; margin-bottom: 10px;'>Foto Klinis Asli</p>", unsafe_allow_html=True)
@@ -472,7 +473,7 @@ if menu == "Dashboard Skrining":
                     st.image(res_plotted, use_container_width=True)
 
                 st.markdown(f"""
-                    <div class="anim-slide" style="background: white; border: 1px solid #E2E8F0; border-left: 6px solid {C_BLUE}; border-radius: 12px; padding: 24px; margin-top: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+                    <div class="anim-slide" style="background: white; border: 1px solid {BORDER_COLOR}; border-left: 6px solid {C_BLUE}; border-radius: 12px; padding: 24px; margin-top: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
                         <p style="font-size: 0.8rem; text-transform: uppercase; color: {TEXT_MUTED}; font-weight: 700; margin: 0 0 10px 0; letter-spacing: 0.05em;">Sintesis Suspek Diagnosis (AI + OLD CARTS)</p>
                         <p style="font-size: 1.1rem; color: {TEXT_DARK}; font-weight: 600; margin: 0; line-height: 1.5;">{sintesis_akhir}</p>
                     </div>
@@ -485,11 +486,11 @@ if menu == "Dashboard Skrining":
                         urg = info['urgensi']
                         bg_badge = "badge-high" if "Tinggi" in urg else "badge-med" if urg == "Sedang" else "badge-low"
                         st.markdown(f"""
-                            <div style="background: white; border-radius: 12px; padding: 20px; margin-bottom: 15px; border: 1px solid #E2E8F0;">
+                            <div style="background: white; border-radius: 12px; padding: 20px; margin-bottom: 15px; border: 1px solid {BORDER_COLOR};">
                                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                                     <span style="font-weight: 700; font-size: 1.05rem; color: {TEXT_DARK};">{info['nama_klinis']}</span>
                                     <div>
-                                        <span class="badge" style="background: {BG_MAIN}; color: {TEXT_DARK}; border: 1px solid #E2E8F0; margin-right: 8px;">Akurasi: {conf*100:.1f}%</span>
+                                        <span class="badge" style="background: {BG_MAIN}; color: {TEXT_DARK}; border: 1px solid {BORDER_COLOR}; margin-right: 8px;">Akurasi: {conf*100:.1f}%</span>
                                         <span class="badge {bg_badge}">{urg}</span>
                                     </div>
                                 </div>
@@ -608,7 +609,7 @@ elif menu == "Referensi Klinis":
         
         st.markdown(f"""
             <div class="glass-card" style="padding: 24px; margin-bottom: 20px; border-left: 5px solid {C_BLUE};">
-                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; padding-bottom: 16px; margin-bottom: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid {BORDER_COLOR}; padding-bottom: 16px; margin-bottom: 16px;">
                     <h3 style="margin: 0; color: {TEXT_DARK} !important;">{info['nama_klinis']}</h3>
                     <span class="badge {bg_badge}">{urg}</span>
                 </div>
