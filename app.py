@@ -1,8 +1,8 @@
 """
 Klinik AI RSGM — Sistem Skrining Lesi Oral berbasis YOLO
 =========================================================
-Antarmuka: Frost UI, Clean, dan Modern SaaS
-Fitur Baru: Login, OLD CARTS, Batch Upload, EMR Export, AI Synthesis
+Antarmuka: Frost UI (Dashboard) & Saleskip Clone (Login)
+Fitur: Login, OLD CARTS, Batch Upload, EMR Export, AI Synthesis
 """
 
 import io
@@ -22,7 +22,7 @@ except ImportError:
 # ============================================================
 # KONFIGURASI GLOBAL & DATABASE
 # ============================================================
-APP_VERSION = "3.0 (Frost UI & OLD CARTS Integration)"
+APP_VERSION = "6.0 (Saleskip Login & Frost UI Dashboard)"
 CLINIC_NAME = "RSGM Unjani"
 USER_NAME = "drg. Adinara Savero, S.KG"
 USER_ROLE = "Clinical Clerkship (Koas Aktif)"
@@ -34,7 +34,6 @@ OPERATOR_PASS = "2560171013"
 MODEL_PATH = Path("best.pt")
 DB_FILE = Path("log_deteksi.csv")
 
-# Penambahan kolom OLD CARTS dan Suspek Diagnosis tanpa menghapus kolom lama
 DB_COLUMNS = [
     "ID", "Waktu", "Tanggal", "Lesi_Terdeteksi", "Confidence", "Model_Version", "Nama_File",
     "O_Onset", "L_Location", "D_Duration", "C_Character", 
@@ -44,8 +43,6 @@ DB_COLUMNS = [
 # PALET WARNA (Modern Frost UI Medical SaaS)
 PRIMARY = "#0f766e"        # Deep Teal
 PRIMARY_LIGHT = "#ccfbf1"
-ACCENT = "#fbbf24"         # Amber
-DANGER = "#ef4444"         # Red
 DARK_TEXT = "#0f172a"      # Slate 900
 GRAY_TEXT = "#64748b"      # Slate 500
 BG_MIST = "#f4f7f9"        # Frost background
@@ -117,28 +114,17 @@ def init_db() -> None:
     if not DB_FILE.exists():
         pd.DataFrame(columns=DB_COLUMNS).to_csv(DB_FILE, index=False)
         return
-    try:
-        df = pd.read_csv(DB_FILE)
-    except pd.errors.EmptyDataError:
-        df = pd.DataFrame(columns=DB_COLUMNS)
-    except pd.errors.ParserError:
-        backup_path = DB_FILE.with_name(DB_FILE.stem + "_backup" + DB_FILE.suffix)
-        DB_FILE.rename(backup_path)
-        pd.DataFrame(columns=DB_COLUMNS).to_csv(DB_FILE, index=False)
-        return
-
+    try: df = pd.read_csv(DB_FILE)
+    except Exception: df = pd.DataFrame(columns=DB_COLUMNS)
     missing = [c for c in DB_COLUMNS if c not in df.columns]
     if missing or list(df.columns) != DB_COLUMNS:
-        for col in missing:
-            df[col] = None
+        for col in missing: df[col] = None
         df[DB_COLUMNS].to_csv(DB_FILE, index=False)
 
 def load_log() -> pd.DataFrame:
     init_db()
-    try:
-        df = pd.read_csv(DB_FILE)
-    except pd.errors.EmptyDataError:
-        df = pd.DataFrame(columns=DB_COLUMNS)
+    try: df = pd.read_csv(DB_FILE)
+    except Exception: df = pd.DataFrame(columns=DB_COLUMNS)
     df["Confidence"] = pd.to_numeric(df["Confidence"], errors="coerce")
     return df[DB_COLUMNS]
 
@@ -158,15 +144,9 @@ def load_model(path: Path):
 def get_lesion_info(nama: str) -> dict:
     info = LESION_INFO.get(str(nama).lower().strip())
     if info: return info
-    return {
-        "nama_klinis": str(nama).title(),
-        "deskripsi": "Informasi klinis belum tersedia untuk anomali ini.",
-        "rekomendasi": "Evaluasi klinis mendalam oleh dokter penanggung jawab.",
-        "urgensi": "Tidak Diketahui",
-    }
+    return {"nama_klinis": str(nama).title(), "deskripsi": "Informasi klinis belum tersedia di database.", "rekomendasi": "Evaluasi klinis mendalam oleh dokter gigi.", "urgensi": "Tidak Diketahui"}
 
 def synthesize_clinical_diagnosis(detections, anamnesis):
-    """Menghasilkan suspek diagnosis cerdas berdasarkan visual YOLO dan teks OLD CARTS."""
     if not detections:
         return "Tidak terdeteksi anomali visual. Pertimbangkan observasi berbasis keluhan (OLD CARTS)."
     hasil = []
@@ -175,19 +155,13 @@ def synthesize_clinical_diagnosis(detections, anamnesis):
         if anamnesis:
             sev = int(anamnesis.get("S_Severity", 0))
             char = str(anamnesis.get("C_Character", "")).lower()
-            
             if key == "karies":
-                if sev >= 6 or "denyut" in char:
-                    hasil.append("Suspek Pulpitis Irreversibel (Karies disertai nyeri tajam/berdenyut).")
-                elif sev >= 3 or "ngilu" in char:
-                    hasil.append("Suspek Pulpitis Reversibel (Karies dengan sensitivitas ringan/ngilu).")
-                else:
-                    hasil.append("Karies Asimtomatik (Tanpa keluhan subjektif signifikan).")
+                if sev >= 6 or "denyut" in char: hasil.append("Suspek Pulpitis Irreversibel (Karies disertai nyeri tajam/berdenyut).")
+                elif sev >= 3 or "ngilu" in char: hasil.append("Suspek Pulpitis Reversibel (Karies dengan sensitivitas ringan/ngilu).")
+                else: hasil.append("Karies Asimtomatik (Tanpa keluhan subjektif signifikan).")
             elif key in ["ulkus traumatikus", "cheek biting"]:
-                if sev >= 5:
-                    hasil.append(f"Lesi traumatik reaktif akut (Tingkat nyeri {sev}/10). Butuh intervensi topikal.")
-                else:
-                    hasil.append("Lesi traumatik fase penyembuhan / asimtomatik.")
+                if sev >= 5: hasil.append(f"Lesi traumatik reaktif akut (Tingkat nyeri {sev}/10). Butuh intervensi topikal.")
+                else: hasil.append("Lesi traumatik fase penyembuhan / asimtomatik.")
             else:
                 hasil.append(f"Konfirmasi visual: {LESION_INFO.get(key, {}).get('nama_klinis', nama_lesi)}.")
         else:
@@ -196,64 +170,96 @@ def synthesize_clinical_diagnosis(detections, anamnesis):
 
 
 # ============================================================
-# HALAMAN LOGIN (FROST UI)
+# HALAMAN LOGIN (SALESKIP CLONE DESIGN)
 # ============================================================
 if not st.session_state.logged_in:
     st.markdown(f"""
         <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-        html, body, [class*="css"] {{ font-family: 'Inter', sans-serif !important; margin: 0; padding: 0; }}
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+        html, body, [class*="css"] {{ font-family: 'Plus Jakarta Sans', sans-serif !important; margin: 0; padding: 0; }}
         #MainMenu, footer, header {{ visibility: hidden; }}
         [data-testid="stSidebar"] {{ display: none; }}
         .block-container {{ padding: 0 !important; max-width: 100% !important; }}
         
-        .login-wrapper {{
-            min-height: 100vh; display: flex; align-items: center; justify-content: center;
-            background: linear-gradient(135deg, #e0f2fe 0%, #ccfbf1 100%);
+        /* Background Split - Saleskip Style */
+        .login-bg-left {{
+            position: fixed; top: 0; left: 0; width: 55%; height: 100vh;
+            background-color: #2b3cca; /* Saleskip Blue */
+            background-image: 
+                radial-gradient(circle at -20% 50%, transparent 40%, rgba(255,255,255,0.06) 41%, rgba(255,255,255,0.06) 42%, transparent 43%),
+                radial-gradient(circle at -20% 50%, transparent 50%, rgba(255,255,255,0.06) 51%, rgba(255,255,255,0.06) 52%, transparent 53%),
+                radial-gradient(circle at -20% 50%, transparent 60%, rgba(255,255,255,0.06) 61%, rgba(255,255,255,0.06) 62%, transparent 63%);
+            z-index: 0;
         }}
-        .login-card {{
-            background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(16px);
-            border: 1px solid rgba(255, 255, 255, 0.5); border-radius: 24px;
-            padding: 40px; width: 100%; max-width: 450px;
-            box-shadow: 0 20px 40px rgba(15, 23, 42, 0.08);
-            animation: slideUp 0.6s ease-out forwards;
+        .login-bg-right {{
+            position: fixed; top: 0; right: 0; width: 45%; height: 100vh;
+            background-color: #ffffff; z-index: 0;
         }}
-        @keyframes slideUp {{ from {{ opacity: 0; transform: translateY(20px); }} to {{ opacity: 1; transform: translateY(0); }} }}
         
+        /* Clean Inputs - Underline Only */
         .stTextInput input {{
-            border: 1px solid #cbd5e1 !important; border-radius: 12px !important; padding: 12px 16px !important;
-            transition: all 0.2s !important;
+            border: none !important; border-bottom: 2px solid #e5e7eb !important; border-radius: 0 !important;
+            padding: 12px 0 12px 0 !important; background-color: transparent !important; color: #111827 !important;
+            box-shadow: none !important; font-size: 1rem !important; transition: border-color 0.2s ease !important;
         }}
-        .stTextInput input:focus {{ border-color: {PRIMARY} !important; box-shadow: 0 0 0 3px {PRIMARY_LIGHT} !important; }}
+        .stTextInput input:focus {{ border-bottom: 2px solid #111827 !important; }}
+        .stTextInput input::placeholder {{ color: #9ca3af !important; font-weight: 500 !important; }}
         
+        /* Hide Widget Label */
+        div[data-testid="stWidgetLabel"] {{ display: none !important; }}
+        
+        /* Solid Black Button */
         .stButton>button {{
-            background: {PRIMARY} !important; color: white !important; width: 100% !important;
-            border-radius: 12px !important; padding: 12px !important; font-weight: 600 !important;
-            transition: all 0.2s !important; border: none !important; margin-top: 10px !important;
+            background-color: #111827 !important; color: white !important; border-radius: 8px !important;
+            padding: 14px !important; font-weight: 600 !important; width: 100% !important; border: none !important;
+            transition: all 0.2s ease !important;
         }}
-        .stButton>button:hover {{ background: #115e59 !important; transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(15, 23, 42, 0.1) !important; }}
-        div[data-testid="stForm"] {{ border: none; background: transparent; padding: 0; }}
+        .stButton>button:hover {{ background-color: #374151 !important; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }}
+        
+        div[data-testid="stForm"] {{ border: none; background: transparent; padding: 0; box-shadow: none; }}
         </style>
         
-        <div class="login-wrapper">
-            <div class="login-card">
-                <div style="text-align: center; margin-bottom: 30px;">
-                    <div style="width: 48px; height: 48px; background: {PRIMARY_LIGHT}; color: {PRIMARY}; border-radius: 14px; display: inline-flex; align-items: center; justify-content: center; font-size: 24px; font-weight: bold; margin-bottom: 15px;">✦</div>
-                    <h2 style="margin: 0; color: {DARK_TEXT}; font-weight: 800; font-size: 1.5rem;">RSGM Unjani</h2>
-                    <p style="margin: 5px 0 0 0; color: {GRAY_TEXT}; font-size: 0.9rem;">Clinical Intelligence Workspace</p>
-                </div>
+        <div class="login-bg-left"></div>
+        <div class="login-bg-right"></div>
     """, unsafe_allow_html=True)
     
-    col_space1, col_login, col_space3 = st.columns([1, 2, 1])
-    with col_login:
+    col1, col2 = st.columns([55, 45], gap="large")
+    
+    with col1:
+        st.markdown("""
+            <div style="height: 100vh; display: flex; flex-direction: column; justify-content: center; padding-left: 15%; padding-right: 15%; position: relative; z-index: 1;">
+                <div style="font-size: 100px; color: white; line-height: 0.8; margin-bottom: 40px; font-weight: 400; font-family: sans-serif;">*</div>
+                <h1 style="color: white !important; font-size: 4rem; font-weight: 800; line-height: 1.1; margin: 0; letter-spacing: -1px;">Hello</h1>
+                <h1 style="color: white !important; font-size: 4rem; font-weight: 800; line-height: 1.1; margin: 0; letter-spacing: -1px;">RSGM Unjani! 👋</h1>
+                <p style="color: rgba(255,255,255,0.9); font-size: 1.1rem; line-height: 1.6; margin-top: 30px; font-weight: 400; max-width: 90%;">
+                    Skip repetitive and manual medical tasks. Get highly productive through AI automation and save tons of time!
+                </p>
+                <div style="position: absolute; bottom: 40px; color: rgba(255,255,255,0.6); font-size: 0.9rem;">
+                    © 2026 RSGM Unjani. All rights reserved.
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+        
+    with col2:
+        st.markdown("""
+            <div style="height: 100vh; display: flex; flex-direction: column; justify-content: center; padding-left: 10%; padding-right: 20%; position: relative; z-index: 1;">
+                <div style="position: absolute; top: 40px; left: 10%;">
+                    <h2 style="color: #000000 !important; font-weight: 800; font-size: 1.5rem; margin: 0; letter-spacing: -0.5px;">Klinik AI RSGM</h2>
+                </div>
+                
+                <h2 style="color: #000000 !important; font-weight: 800; font-size: 2rem; margin: 0; letter-spacing: -0.5px;">Welcome Back!</h2>
+                <p style="color: #6b7280; font-size: 0.9rem; margin-top: 10px; margin-bottom: 40px; line-height: 1.5;">
+                    Don't have an account? <span style="color: #000000; font-weight: 600; text-decoration: underline; cursor: pointer;">Request access now</span>, it's FREE! Takes less than a minute.
+                </p>
+        """, unsafe_allow_html=True)
+        
         with st.form("login_form"):
-            st.markdown(f"<label style='font-size: 0.85rem; font-weight: 600; color: {DARK_TEXT};'>Email / ID Operator</label>", unsafe_allow_html=True)
-            user_input = st.text_input("ID", label_visibility="collapsed", placeholder="contoh: adinara savero")
+            user_input = st.text_input("ID", placeholder="Email / ID Operator (contoh: adinara savero)")
+            st.markdown("<div style='height: 15px;'></div>", unsafe_allow_html=True)
+            pass_input = st.text_input("Pass", type="password", placeholder="Password")
+            st.markdown("<div style='height: 25px;'></div>", unsafe_allow_html=True)
             
-            st.markdown(f"<br><label style='font-size: 0.85rem; font-weight: 600; color: {DARK_TEXT};'>Password</label>", unsafe_allow_html=True)
-            pass_input = st.text_input("Pass", label_visibility="collapsed", type="password", placeholder="••••••••")
-            
-            submit_btn = st.form_submit_button("Masuk ke Sistem")
+            submit_btn = st.form_submit_button("Login Now")
             
             if submit_btn:
                 if user_input.lower().strip() == OPERATOR_ID and pass_input == OPERATOR_PASS:
@@ -262,14 +268,12 @@ if not st.session_state.logged_in:
                 else:
                     st.error("Kredensial tidak valid.")
         
-        st.markdown(f"""
-            <div style="margin-top: 20px; text-align: center; background: #f8fafc; padding: 12px; border-radius: 12px; border: 1px dashed #cbd5e1;">
-                <p style="margin: 0; font-size: 0.8rem; font-weight: 600; color: {PRIMARY};">Akses Demo AI</p>
-                <p style="margin: 0; font-size: 0.75rem; color: {GRAY_TEXT};">ID: adinara savero | Pass: 2560171013</p>
+        st.markdown("""
+                <div style="text-align: center; margin-top: 30px;">
+                    <p style="color: #6b7280; font-size: 0.85rem;">Forget password? <strong style="color: #000000; text-decoration: underline; cursor: pointer;">Click here</strong></p>
+                </div>
             </div>
         """, unsafe_allow_html=True)
-    
-    st.markdown("</div></div>", unsafe_allow_html=True)
     st.stop()
 
 
@@ -280,7 +284,7 @@ st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
     
-    html, body, [class*="css"] {{ font-family: 'Inter', sans-serif !important; }}
+    html, body, [class*="css"] {{ font-family: 'Inter', sans-serif !important; color: {DARK_TEXT}; }}
     .stApp {{ background-color: {BG_MIST}; }}
     
     /* Global Animations */
@@ -292,23 +296,17 @@ st.markdown(f"""
     
     /* FROST UI / GLASSMORPHISM CARDS */
     .frost-card {{
-        background: rgba(255, 255, 255, 0.75);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
-        border: 1px solid rgba(255, 255, 255, 0.5);
-        border-radius: 16px;
-        padding: 24px;
-        box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.05), 0 2px 4px -1px rgba(15, 23, 42, 0.03);
-        margin-bottom: 24px;
+        background: rgba(255, 255, 255, 0.75); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.5); border-radius: 16px; padding: 24px;
+        box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.05), 0 2px 4px -1px rgba(15, 23, 42, 0.03); margin-bottom: 24px;
         transition: transform 0.2s, box-shadow 0.2s;
     }}
     .frost-card:hover {{ box-shadow: 0 10px 15px -3px rgba(15, 23, 42, 0.05); }}
     
-    /* BUTTONS */
+    /* Tombol Utama Frost UI */
     .stButton>button {{
-        background-color: {PRIMARY} !important; color: white !important;
-        border-radius: 10px !important; border: none !important; padding: 12px 24px !important;
-        font-weight: 600 !important; transition: all 0.2s ease !important;
+        background-color: {PRIMARY} !important; color: white !important; border-radius: 10px !important; 
+        border: none !important; padding: 12px 24px !important; font-weight: 600 !important; transition: all 0.2s ease !important;
     }}
     .stButton>button:hover {{ background-color: #115e59 !important; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(15,23,42,0.1) !important; }}
     
