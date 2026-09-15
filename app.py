@@ -439,7 +439,7 @@ if menu == "Dashboard":
         </div>
     """, unsafe_allow_html=True)
     
-    tab_unggah, tab_kamera = st.tabs(["Unggah Berkas (Batch)", "Kamera Perangkat"])
+    tab_unggah, tab_kamera = st.tabs(["Unggah Foto", "Kamera Perangkat"])
     images_to_process, file_names = [], []
 
     with tab_unggah:
@@ -461,7 +461,7 @@ if menu == "Dashboard":
 
     if images_to_process:
         st.markdown("<br>", unsafe_allow_html=True)
-        analyze_btn = st.button("Mulai Proses Inferensi YOLO & Sintesis", use_container_width=True, disabled=(model is None))
+        analyze_btn = st.button("ANALISIS GAMBAR", use_container_width=True, disabled=(model is None))
 
         if analyze_btn and model is not None:
             if not st.session_state.anamnesis_data:
@@ -470,7 +470,7 @@ if menu == "Dashboard":
             else:
                 anamnesis = st.session_state.anamnesis_data
 
-            progress = st.progress(0, text="Memulai pemrosesan batch...")
+            progress = st.progress(0, text="Memulai pemrosesan foto...")
             all_new_records = []
             
             for idx, (image, f_name) in enumerate(zip(images_to_process, file_names)):
