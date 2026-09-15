@@ -54,13 +54,13 @@ BORDER_COLOR = "#e2e8f0"
 LESION_INFO = {
     "cheek biting": {
         "nama_klinis": "Morsicatio Buccarum (Cheek Biting)",
-        "deskripsi": "Lesi traumatik pada mukosa bukal akibat kebiasaan menggigit pipi berulang, umumnya tampak sebagai area putih ireguler.",
+        "deskripsi": "Morsicatio buccarum mengacu pada kebiasaan menggigit atau menggerogoti mukosa bukal, yang seringkali mengakibatkan tampilan kasar dan bergerigi pada area yang terkena dan berpotensi menyebabkan ulserasi atau erosi. Kondisi ini mungkin terkait dengan stres atau gangguan psikologis., umumnya tampak sebagai area putih ireguler.",
         "rekomendasi": "Edukasi pasien untuk menghentikan kebiasaan menggigit pipi; evaluasi ulang bila lesi menetap lebih dari 2 minggu.",
         "urgensi": "Rendah",
     },
     "coated tongue": {
         "nama_klinis": "Coated Tongue (Lidah Berlapis)",
-        "deskripsi": "Lapisan putih hingga kekuningan pada dorsum lidah akibat penumpukan debris, bakteri, dan sel epitel deskuamasi.",
+        "deskripsi": "Kondisi klinis yang terjadi pada bagian permukaan lidah yang ditutupi oleh suatu selaput pseudomembran yang terjadi akibat penumpukan debris atau sisa makanan, sel-sel keratin yang tidak terdeskuamasi, dan dapat ditemukan adanya mikroorganisme seperti bakteri maupun jamur.",
         "rekomendasi": "Instruksikan pembersihan lidah rutin (tongue scraper) dan evaluasi kebersihan mulut secara umum.",
         "urgensi": "Rendah",
     },
@@ -89,7 +89,7 @@ LESION_INFO = {
         "urgensi": "Sedang",
     },
     "torus": {
-        "nama_klinis": "Torus (Mandibularis/Palatinus)",
+        "nama_klinis": "Torus",
         "deskripsi": "Eksostosis tulang jinak pada mandibula atau palatum, umumnya asimtomatik.",
         "rekomendasi": "Tidak memerlukan tindakan kecuali mengganggu fungsi (bicara, protesa) atau membesar signifikan.",
         "urgensi": "Rendah",
