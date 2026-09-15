@@ -22,34 +22,33 @@ except ImportError:
 # ============================================================
 # KONFIGURASI GLOBAL & DATABASE
 # ============================================================
-APP_VERSION = "4.1 (Enterprise UI & Bug Fix)"
+APP_VERSION = "4.3 (Complete EMR & Prevalence Analytics)"
 CLINIC_NAME = "RSGM Unjani"
 USER_ROLE = "Clinical Clerkship (Koas Aktif)"
 
-# Pastikan file logo UNJANI ada di direktori yang sama dengan nama ini:
 LOGO_PATH = "Universitas Jenderal Achmad Yani (UNJANI) Logo - Colored - zonalogo.com.jpg" 
 
 MODEL_PATH = Path("best.pt")
 DB_FILE = Path("log_deteksi_emr.csv")
 
+# Seluruh kolom data rekam medis lengkap
 DB_COLUMNS = [
-    "ID", "Waktu", "Tanggal", "Lesi_Terdeteksi", "Confidence", "Nama_File",
+    "ID", "Tanggal", "Waktu", "Nama_File", "Lesi_Terdeteksi", "Confidence",
     "O_Onset", "L_Location", "D_Duration", "C_Character", 
     "A_Aggravating", "R_Relieving", "T_Timing", "S_Severity", "Suspek_Diagnosis"
 ]
 
-# PALET WARNA (Berdasarkan referensi 'Fairy Color Palette')
+# PALET WARNA (Fairy Color Palette & Modern Medical)
 C_PURPLE = "#A163F7"
 C_BLUE   = "#6F88FC"
 C_CYAN   = "#45E3FF"
 C_CREAM  = "#F9FAFB" 
 
-# Palet Fungsional
 BG_MAIN       = "#F4F7F9"
 BG_SIDEBAR    = "#1A1D2D" 
 TEXT_DARK     = "#1E293B"
 TEXT_MUTED    = "#64748B"
-BORDER_COLOR  = "#E2E8F0" # [PERBAIKAN ERROR]: Variabel dikembalikan agar tidak terjadi NameError
+BORDER_COLOR  = "#E2E8F0"
 
 LESION_INFO = {
     "cheek biting": {"nama_klinis": "Morsicatio Buccarum", "deskripsi": "Lesi traumatik akibat gigitan berulang pada mukosa pipi.", "rekomendasi": "Edukasi hilangkan habit; evaluasi 2 minggu.", "urgensi": "Rendah"},
@@ -60,9 +59,9 @@ LESION_INFO = {
     "stain calculus": {"nama_klinis": "Stain & Kalkulus", "deskripsi": "Deposit mineral plak terkalsifikasi.", "rekomendasi": "Tindakan scaling dan root planing (SRP).", "urgensi": "Sedang"},
     "torus": {"nama_klinis": "Torus", "deskripsi": "Eksostosis tulang jinak asimtomatik.", "rekomendasi": "Observasi kecuali mengganggu pembuatan protesa.", "urgensi": "Rendah"},
     "ulkus traumatikus": {"nama_klinis": "Ulkus Traumatikus", "deskripsi": "Hilangnya lapisan epitel akibat trauma.", "rekomendasi": "Kendalikan faktor etiologi, berikan obat topikal.", "urgensi": "Sedang"},
+    "olp": {"nama_klinis": "Oral Lichen Planus", "deskripsi": "Kondisi peradangan kronis pada mukosa mulut.", "rekomendasi": "Evaluasi klinis lanjutan, pertimbangkan biopsi jika atipikal.", "urgensi": "Sedang"},
 }
 
-# --- INISIALISASI SESSION STATE ---
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 if 'anamnesis_data' not in st.session_state:
@@ -71,16 +70,44 @@ if 'anamnesis_data' not in st.session_state:
 st.set_page_config(page_title="Klinik AI RSGM", layout="wide", initial_sidebar_state="expanded")
 
 # ============================================================
-# FUNGSI BANTU & LOGIKA AI
+# FUNGSI BANTU & DATABASE EMR
 # ============================================================
 def init_db() -> None:
-    if not DB_FILE.exists():
-        pd.DataFrame(columns=DB_COLUMNS).to_csv(DB_FILE, index=False)
+    """Inisialisasi database CSV dan isi data dummy jika kosong agar grafik & EMR langsung siap."""
+    if not DB_FILE.exists() or DB_FILE.stat().st_size == 0:
+        dummy_data = [
+            {
+                "ID": "a1b2c3d4", "Tanggal": datetime.now().strftime("%Y-%m-%d"), "Waktu": "09:30:15", "Nama_File": "klinis_gigi_01.jpg",
+                "Lesi_Terdeteksi": "karies", "Confidence": 0.8921, "O_Onset": "3 hari lalu", "L_Location": "Regio gigi molar 36", 
+                "D_Duration": "Hilang timbul", "C_Character": "Berdenyut tajam", "A_Aggravating": "Air dingin dan manis", 
+                "R_Relieving": "Minum obat analgetik", "T_Timing": "Malam hari", "S_Severity": 7, 
+                "Suspek_Diagnosis": "Suspek Pulpitis Irreversibel (Karies profunda + nyeri spontan/berdenyut parah)."
+            },
+            {
+                "ID": "e5f6g7h8", "Tanggal": datetime.now().strftime("%Y-%m-%d"), "Waktu": "10:15:40", "Nama_File": "mukosa_bukal_02.jpg",
+                "Lesi_Terdeteksi": "cheek biting", "Confidence": 0.8432, "O_Onset": "1 minggu lalu", "L_Location": "Mukosa bukal kanan", 
+                "D_Duration": "Terus-menerus", "C_Character": "Ngilu/Tumpul", "A_Aggravating": "Tergesek makanan", 
+                "R_Relieving": "Istirahat", "T_Timing": "Sepanjang waktu", "S_Severity": 3, 
+                "Suspek_Diagnosis": "Lesi traumatik tahap penyembuhan / ringan."
+            },
+            {
+                "ID": "i9j0k1l2", "Tanggal": datetime.now().strftime("%Y-%m-%d"), "Waktu": "11:00:22", "Nama_File": "gingiva_03.jpg",
+                "Lesi_Terdeteksi": "stain calculus", "Confidence": 0.9150, "O_Onset": "1 bulan lalu", "L_Location": "Regio anterior rahang bawah", 
+                "D_Duration": "Kronis", "C_Character": "Berdarah", "A_Aggravating": "Saat menyikat gigi", 
+                "R_Relieving": "Berkumur air garam", "T_Timing": "Pagi hari", "S_Severity": 2, 
+                "Suspek_Diagnosis": "Suspek Periodontitis/Gingivitis (Kalkulus + keluhan perdarahan gingiva)."
+            }
+        ]
+        pd.DataFrame(dummy_data).to_csv(DB_FILE, index=False)
         return
-    try: df = pd.read_csv(DB_FILE)
-    except Exception: df = pd.DataFrame(columns=DB_COLUMNS)
+
+    try: 
+        df = pd.read_csv(DB_FILE)
+    except Exception: 
+        df = pd.DataFrame(columns=DB_COLUMNS)
+        
     missing = [c for c in DB_COLUMNS if c not in df.columns]
-    if missing or list(df.columns) != DB_COLUMNS:
+    if missing:
         for col in missing: df[col] = None
         df[DB_COLUMNS].to_csv(DB_FILE, index=False)
 
@@ -103,6 +130,16 @@ def load_model(path: Path):
     if YOLO is None or not path.exists(): return None
     try: return YOLO(str(path))
     except Exception: return None
+
+def get_lesion_info(nama: str) -> dict:
+    info = LESION_INFO.get(str(nama).lower().strip())
+    if info: return info
+    return {
+        "nama_klinis": str(nama).title(),
+        "deskripsi": "Informasi klinis belum tersedia di database untuk anomali ini.",
+        "rekomendasi": "Lakukan evaluasi klinis mendalam oleh dokter gigi.",
+        "urgensi": "Tidak Diketahui",
+    }
 
 def synthesize_clinical_diagnosis(detections, anamnesis):
     if not detections:
@@ -146,60 +183,42 @@ def get_image_as_base64(path):
         return None
 
 # ============================================================
-# HALAMAN LOGIN (DESAIN SPLIT-SCREEN ALA SALESKIP)
+# HALAMAN LOGIN (SPLIT-SCREEN)
 # ============================================================
 if not st.session_state.logged_in:
-    # Injeksi CSS Khusus Login
     st.markdown(f"""
         <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
         html, body, [class*="css"] {{ font-family: 'Plus Jakarta Sans', sans-serif !important; margin: 0; padding: 0; }}
-        
         #MainMenu, footer, header {{ visibility: hidden; }}
         [data-testid="stSidebar"] {{ display: none; }}
-        
-        /* Memaksa layout full screen tanpa padding standar Streamlit */
         .block-container {{ padding: 0 !important; max-width: 100% !important; }}
         
         .login-bg-left {{
             position: fixed; top: 0; left: 0; width: 50%; height: 100vh;
-            background: linear-gradient(145deg, {C_BLUE} 0%, #3B4CCA 100%);
-            z-index: 0;
+            background: linear-gradient(145deg, {C_BLUE} 0%, #3B4CCA 100%); z-index: 0;
         }}
         .login-bg-right {{
             position: fixed; top: 0; left: 50%; width: 50%; height: 100vh;
-            background: #FFFFFF;
-            z-index: 0;
+            background: #FFFFFF; z-index: 0;
         }}
-        
-        /* Styling Form di sebelah kanan */
-        div[data-testid="stForm"] {{
-            border: none; background: transparent; padding: 0; box-shadow: none;
-        }}
-        
-        /* Tombol Login Hitam ala Saleskip */
+        div[data-testid="stForm"] {{ border: none; background: transparent; padding: 0; box-shadow: none; }}
         .stButton>button {{
             background: #111827 !important; color: white !important; border-radius: 8px !important;
-            padding: 12px 24px !important; width: 100% !important; font-weight: 700 !important;
-            border: none !important; transition: all 0.3s ease !important;
+            padding: 12px 24px !important; width: 100% !important; font-weight: 700 !important; border: none !important;
         }}
-        .stButton>button:hover {{ background: #374151 !important; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }}
-        
-        /* Input Text Styling */
+        .stButton>button:hover {{ background: #374151 !important; transform: translateY(-2px); }}
         .stTextInput input {{
             border: none !important; border-bottom: 2px solid #E5E7EB !important; border-radius: 0 !important;
-            padding-left: 0 !important; background-color: transparent !important; box-shadow: none !important;
+            padding-left: 0 !important; background-color: transparent !important;
         }}
         .stTextInput input:focus {{ border-bottom: 2px solid {C_BLUE} !important; }}
         </style>
-        
         <div class="login-bg-left"></div>
         <div class="login-bg-right"></div>
     """, unsafe_allow_html=True)
     
-    # Layout 50/50 menggunakan columns
     col_left, col_right = st.columns(2)
-    
     with col_left:
         st.markdown(f"""
             <div style="height: 100vh; display: flex; flex-direction: column; justify-content: center; padding: 15%; z-index: 1; position: relative;">
@@ -214,33 +233,23 @@ if not st.session_state.logged_in:
                 </div>
             </div>
         """, unsafe_allow_html=True)
-        
     with col_right:
         st.markdown("<div style='height: 25vh;'></div>", unsafe_allow_html=True)
         st.markdown(f"""
             <div style="padding: 0 20%; z-index: 1; position: relative;">
                 <h2 style="color: #111827 !important; font-weight: 800; font-size: 2rem;">Welcome Back!</h2>
                 <p style="color: #6B7280; font-size: 0.9rem; margin-bottom: 40px;">
-                    Don't have an account? <span style="text-decoration: underline; color: #111827; font-weight: 600; cursor: pointer;">Request access now</span>. It takes less than a minute.
+                    Don't have an account? <span style="text-decoration: underline; color: #111827; font-weight: 600;">Request access now</span>.
                 </p>
             </div>
         """, unsafe_allow_html=True)
-        
-        col_form_space1, col_form, col_form_space3 = st.columns([1, 3, 1])
+        _, col_form, _ = st.columns([1, 3, 1])
         with col_form:
             with st.form("login_form"):
                 user_input = st.text_input("Email / ID Operator", placeholder="contoh: adinara savero")
                 pass_input = st.text_input("Password", type="password", placeholder="••••••••")
-                
                 st.markdown("<br>", unsafe_allow_html=True)
                 submit_btn = st.form_submit_button("Login Now")
-                
-                st.markdown(f"""
-                    <div style="text-align: center; margin-top: 15px; margin-bottom: 15px;">
-                        <span style="font-size: 0.85rem; color: #6B7280;">Forget password? <strong style="color: #111827; cursor: pointer; text-decoration: underline;">Click here</strong></span>
-                    </div>
-                """, unsafe_allow_html=True)
-                
                 if submit_btn:
                     if user_input.lower().strip() == "adinara savero" and pass_input == "2560171013":
                         st.session_state.logged_in = True
@@ -249,90 +258,51 @@ if not st.session_state.logged_in:
                         st.error("Kredensial tidak valid.")
     st.stop()
 
-
 # ============================================================
-# CSS UTAMA & SIDEBAR (JIKA SUDAH LOGIN)
+# CSS UTAMA & SIDEBAR (SETELAH LOGIN)
 # ============================================================
 st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
     html, body, [class*="css"] {{ font-family: 'Plus Jakarta Sans', sans-serif !important; }}
     .stApp {{ background-color: {BG_MAIN}; }}
-    
-    /* ANIMASI KUSTOM */
     @keyframes slideUp {{ from {{ opacity: 0; transform: translateY(15px); }} to {{ opacity: 1; transform: translateY(0); }} }}
     .anim-slide {{ animation: slideUp 0.5s ease-out forwards; }}
-    
     h1, h2, h3, h4, h5 {{ color: {TEXT_DARK} !important; font-weight: 700 !important; letter-spacing: -0.02em; }}
     p, label {{ color: {TEXT_MUTED}; }}
     
-    /* STYLING SIDEBAR (DARK MODERN ALA REFERENSI) */
-    section[data-testid="stSidebar"] {{ 
-        background-color: {BG_SIDEBAR} !important; 
-        border-right: none !important;
-    }}
+    section[data-testid="stSidebar"] {{ background-color: {BG_SIDEBAR} !important; border-right: none !important; }}
     section[data-testid="stSidebar"] * {{ color: #94A3B8 !important; }} 
     section[data-testid="stSidebar"] h1, section[data-testid="stSidebar"] h2, section[data-testid="stSidebar"] h3 {{ color: #FFFFFF !important; }}
     
-    /* Styling Radio Button agar mirip Navigasi Menu */
     div.row-widget.stRadio > div {{ gap: 8px; }}
     div.row-widget.stRadio > div > label {{
-        background-color: transparent;
-        padding: 12px 16px;
-        border-radius: 8px;
-        transition: all 0.2s ease;
-        margin-bottom: 2px;
-        cursor: pointer;
+        background-color: transparent; padding: 12px 16px; border-radius: 8px; transition: all 0.2s ease; margin-bottom: 2px; cursor: pointer;
     }}
-    div.row-widget.stRadio > div > label:hover {{
-        background-color: rgba(255,255,255,0.05);
-    }}
-    div.row-widget.stRadio > div > label p {{
-        font-weight: 500 !important; font-size: 0.95rem !important;
-    }}
-    /* ACTIVE STATE MENU */
-    div.row-widget.stRadio > div > label[data-checked="true"] {{
-        background-color: {C_BLUE} !important;
-    }}
-    div.row-widget.stRadio > div > label[data-checked="true"] p {{
-        color: #FFFFFF !important; font-weight: 600 !important;
-    }}
+    div.row-widget.stRadio > div > label:hover {{ background-color: rgba(255,255,255,0.05); }}
+    div.row-widget.stRadio > div > label p {{ font-weight: 500 !important; font-size: 0.95rem !important; }}
+    div.row-widget.stRadio > div > label[data-checked="true"] {{ background-color: {C_BLUE} !important; }}
+    div.row-widget.stRadio > div > label[data-checked="true"] p {{ color: #FFFFFF !important; font-weight: 600 !important; }}
     
-    /* KARTU KONTEN / WIDGET */
     .glass-card {{
-        background: #FFFFFF;
-        border: 1px solid {BORDER_COLOR};
-        border-radius: 16px;
-        padding: 24px;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-        margin-bottom: 24px;
-        transition: transform 0.2s;
+        background: #FFFFFF; border: 1px solid {BORDER_COLOR}; border-radius: 16px; padding: 24px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); margin-bottom: 24px;
     }}
-    .glass-card:hover {{ box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05); }}
-    
-    /* TOMBOL AKSI UTAMA */
     .stButton>button {{
-        background-color: {C_BLUE} !important;
-        color: white !important; border-radius: 8px !important;
-        border: none !important; padding: 14px 24px !important;
-        font-weight: 600 !important;
-        transition: all 0.2s !important;
+        background-color: {C_BLUE} !important; color: white !important; border-radius: 8px !important;
+        border: none !important; padding: 14px 24px !important; font-weight: 600 !important; transition: all 0.2s !important;
     }}
     .stButton>button:hover {{ background-color: {C_PURPLE} !important; transform: translateY(-2px); }}
-    
-    /* BADGE KONDISI */
     .badge {{ padding: 6px 14px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; display: inline-block; }}
     .badge-low {{ background-color: #E0F2FE; color: #0284C7; }}
     .badge-med {{ background-color: #FEF3C7; color: #D97706; }}
     .badge-high {{ background-color: #FEE2E2; color: #DC2626; }}
-    
     #MainMenu, footer {{ visibility: hidden; }}
     </style>
 """, unsafe_allow_html=True)
 
-# --- SIDEBAR CONTENT ---
+# --- SIDEBAR ---
 with st.sidebar:
-    # Coba memuat logo jika ada
     logo_base64 = get_image_as_base64(LOGO_PATH)
     if logo_base64:
         st.markdown(f"""
@@ -377,7 +347,6 @@ model = load_model(MODEL_PATH)
 # ============================================================
 if menu == "Dashboard Skrining":
     st.markdown("<div class='anim-slide'>", unsafe_allow_html=True)
-    
     col_hdr1, col_hdr2 = st.columns([3, 1])
     with col_hdr1:
         st.markdown(f"<h1 style='margin-bottom: 5px; color: {TEXT_DARK};'>Skrining Lesi Oral</h1>", unsafe_allow_html=True)
@@ -388,7 +357,6 @@ if menu == "Dashboard Skrining":
     # --- ANAMNESIS ---
     st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
     st.markdown("<h3 style='margin-top:0;'>Fase 1: Anamnesis (OLD CARTS)</h3>", unsafe_allow_html=True)
-    
     with st.form("form_old_carts"):
         c1, c2 = st.columns(2, gap="large")
         with c1:
@@ -413,7 +381,6 @@ if menu == "Dashboard Skrining":
     # --- DETEKSI VISUAL ---
     st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
     st.markdown("<h3 style='margin-top:0;'>Fase 2: Akuisisi Visual</h3>", unsafe_allow_html=True)
-    
     tabs = st.tabs(["Unggah Citra Medis (Batch)", "Kamera Perangkat"])
     images_to_process, file_names = [], []
 
@@ -457,11 +424,20 @@ if menu == "Dashboard Skrining":
                 
                 sintesis_akhir = synthesize_clinical_diagnosis(detections, anamnesis)
                 
+                record_base = {
+                    "ID": str(uuid.uuid4())[:8],
+                    "Tanggal": datetime.now().strftime("%Y-%m-%d"),
+                    "Waktu": datetime.now().strftime("%H:%M:%S"),
+                    "Nama_File": f_name,
+                    **anamnesis,
+                    "Suspek_Diagnosis": sintesis_akhir
+                }
+
                 if not detections:
-                    all_new_records.append({"ID": str(uuid.uuid4())[:8], "Waktu": datetime.now().strftime("%H:%M:%S"), "Tanggal": datetime.now().strftime("%Y-%m-%d"), "Lesi_Terdeteksi": "Tidak terdeteksi", "Confidence": 0, "Nama_File": f_name, **anamnesis, "Suspek_Diagnosis": sintesis_akhir})
+                    all_new_records.append({**record_base, "Lesi_Terdeteksi": "Tidak terdeteksi", "Confidence": 0.0})
                 else:
                     for n_lesi, conf in detections:
-                        all_new_records.append({"ID": str(uuid.uuid4())[:8], "Waktu": datetime.now().strftime("%H:%M:%S"), "Tanggal": datetime.now().strftime("%Y-%m-%d"), "Lesi_Terdeteksi": n_lesi, "Confidence": round(conf, 4), "Nama_File": f_name, **anamnesis, "Suspek_Diagnosis": sintesis_akhir})
+                        all_new_records.append({**record_base, "Lesi_Terdeteksi": n_lesi, "Confidence": round(conf, 4)})
 
                 st.markdown(f"<h4 style='margin-top: 30px; padding-top: 20px; border-top: 1px solid {BORDER_COLOR};'>Dokumen EMR: {f_name}</h4>", unsafe_allow_html=True)
                 col_img1, col_img2 = st.columns(2)
@@ -478,28 +454,6 @@ if menu == "Dashboard Skrining":
                         <p style="font-size: 1.1rem; color: {TEXT_DARK}; font-weight: 600; margin: 0; line-height: 1.5;">{sintesis_akhir}</p>
                     </div>
                 """, unsafe_allow_html=True)
-                
-                if detections:
-                    st.markdown("<h5 style='margin-top: 20px;'>Rincian Parameter Visual</h5>", unsafe_allow_html=True)
-                    for n_lesi, conf in sorted(detections, key=lambda x: -x[1]):
-                        info = get_lesion_info(n_lesi)
-                        urg = info['urgensi']
-                        bg_badge = "badge-high" if "Tinggi" in urg else "badge-med" if urg == "Sedang" else "badge-low"
-                        st.markdown(f"""
-                            <div style="background: white; border-radius: 12px; padding: 20px; margin-bottom: 15px; border: 1px solid {BORDER_COLOR};">
-                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                                    <span style="font-weight: 700; font-size: 1.05rem; color: {TEXT_DARK};">{info['nama_klinis']}</span>
-                                    <div>
-                                        <span class="badge" style="background: {BG_MAIN}; color: {TEXT_DARK}; border: 1px solid {BORDER_COLOR}; margin-right: 8px;">Akurasi: {conf*100:.1f}%</span>
-                                        <span class="badge {bg_badge}">{urg}</span>
-                                    </div>
-                                </div>
-                                <p style="font-size: 0.9rem; color: {TEXT_MUTED}; margin-bottom: 12px;">{info['deskripsi']}</p>
-                                <div style="background: {BG_MAIN}; border-radius: 8px; padding: 12px; font-size: 0.85rem; font-weight: 500; color: {C_BLUE};">
-                                    Tindakan: {info['rekomendasi']}
-                                </div>
-                            </div>
-                        """, unsafe_allow_html=True)
 
             progress_bar.progress(1.0, text="Data berhasil direkam ke dalam sistem.")
             append_log(all_new_records)
@@ -508,12 +462,12 @@ if menu == "Dashboard Skrining":
 
 
 # ============================================================
-# HALAMAN 2: REKAM MEDIS
+# HALAMAN 2: REKAM MEDIS (EMR & DOWNLOAD LENGKAP)
 # ============================================================
 elif menu == "Rekam Medis (EMR)":
     st.markdown("<div class='anim-slide'>", unsafe_allow_html=True)
     st.markdown("## Electronic Medical Record (EMR)")
-    st.markdown("Arsip sistematis yang memuat riwayat anamnesis dan pemindaian AI.")
+    st.markdown("Arsip lengkap yang memuat Tanggal, ID, Waktu Deteksi, Anamnesis (OLD CARTS), Suspek Diagnosis, dan parameter klinis.")
     
     df_log = load_log()
     if df_log.empty:
@@ -537,28 +491,32 @@ elif menu == "Rekam Medis (EMR)":
             mask &= (pd.to_datetime(df_log["Tanggal"], errors="coerce") >= t_start) & (pd.to_datetime(df_log["Tanggal"], errors="coerce") <= t_end)
 
         df_filtered = df_log[mask]
+        
+        # Tampilkan tabel EMR lengkap
         st.dataframe(df_filtered, use_container_width=True)
         
         st.markdown("<br>", unsafe_allow_html=True)
         col_dl1, col_dl2 = st.columns(2)
         with col_dl1:
             csv = df_filtered.to_csv(index=False).encode('utf-8')
-            st.download_button("Unduh CSV", data=csv, file_name="EMR_RSGM_Unjani.csv", mime="text/csv", use_container_width=True)
+            st.download_button("📥 Unduh Semua Data (CSV Lengkap)", data=csv, file_name="EMR_Lengkap_RSGM_Unjani.csv", mime="text/csv", use_container_width=True)
         with col_dl2:
             try:
                 buffer = io.BytesIO()
                 with pd.ExcelWriter(buffer, engine="openpyxl") as writer: df_filtered.to_excel(writer, index=False)
-                st.download_button("Unduh Excel", data=buffer.getvalue(), file_name="EMR_RSGM_Unjani.xlsx", use_container_width=True)
+                st.download_button("📥 Unduh Semua Data (Excel Lengkap)", data=buffer.getvalue(), file_name="EMR_Lengkap_RSGM_Unjani.xlsx", use_container_width=True)
             except ImportError: pass
     st.markdown("</div>", unsafe_allow_html=True)
 
 
 # ============================================================
-# HALAMAN 3: ANALITIK KINERJA
+# HALAMAN 3: ANALITIK KINERJA & GRAFIK PREVALENSI PENYAKIT
 # ============================================================
 elif menu == "Analitik Kinerja":
     st.markdown("<div class='anim-slide'>", unsafe_allow_html=True)
-    st.markdown("## Analitik & Prevalensi Klinis")
+    st.markdown("## Analitik & Grafik Prevalensi Penyakit")
+    st.markdown("Distribusi statistik dan prevalensi temuan patologi oral berdasarkan data rekam medis.")
+    
     df_log = load_log()
     
     if df_log.empty:
@@ -571,26 +529,43 @@ elif menu == "Analitik Kinerja":
         with col_k1:
             st.markdown(f"""
             <div class='glass-card' style='text-align: center; padding: 30px;'>
-                <div style='font-size: 0.85rem; color: {TEXT_MUTED}; font-weight: 700; letter-spacing: 1px;'>TOTAL PEMERIKSAAN</div>
+                <div style='font-size: 0.85rem; color: {TEXT_MUTED}; font-weight: 700; letter-spacing: 1px;'>TOTAL KASUS TERCATAT</div>
                 <div style='font-size: 3rem; font-weight: 800; color: {C_BLUE}; margin: 10px 0;'>{tot}</div>
-                <div style='color: {TEXT_MUTED}; font-size: 0.85rem;'>Tercatat di Sistem EMR</div>
+                <div style='color: {TEXT_MUTED}; font-size: 0.85rem;'>Database EMR RSGM Unjani</div>
             </div>""", unsafe_allow_html=True)
         with col_k2:
             st.markdown(f"""
             <div class='glass-card' style='text-align: center; padding: 30px;'>
-                <div style='font-size: 0.85rem; color: {TEXT_MUTED}; font-weight: 700; letter-spacing: 1px;'>RATA-RATA AKURASI</div>
+                <div style='font-size: 0.85rem; color: {TEXT_MUTED}; font-weight: 700; letter-spacing: 1px;'>RATA-RATA PRESISI AI</div>
                 <div style='font-size: 3rem; font-weight: 800; color: {C_PURPLE}; margin: 10px 0;'>{avg:.1f}%</div>
                 <div style='color: {TEXT_MUTED}; font-size: 0.85rem;'>Tingkat Confidence Model</div>
             </div>""", unsafe_allow_html=True)
 
+        # GRAFIK PREVALENSI PENYAKIT/LESI
+        st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
+        st.markdown("<h4 style='margin-top:0;'>📊 Grafik Prevalensi Penyakit / Lesi Oral</h4>", unsafe_allow_html=True)
+        st.markdown("<p style='font-size: 0.9rem;'>Frekuensi kemunculan masing-masing jenis anomali atau lesi yang terdeteksi dalam sistem.</p>", unsafe_allow_html=True)
+        
+        # Filter out 'Tidak terdeteksi' untuk grafik prevalensi yang bersih
+        df_valid_lesion = df_log[df_log["Lesi_Terdeteksi"] != "Tidak terdeteksi"]
+        if not df_valid_lesion.empty:
+            prevalensi_counts = df_valid_lesion["Lesi_Terdeteksi"].value_counts()
+            st.bar_chart(prevalensi_counts, color=C_BLUE)
+        else:
+            st.info("Belum ada data lesi positif yang terekam untuk grafik prevalensi.")
+        st.markdown("</div>", unsafe_allow_html=True)
+
         col_c1, col_c2 = st.columns(2)
         with col_c1:
-            st.markdown("<div class='glass-card'><h4 style='margin-top:0;'>Prevalensi Temuan Klinis</h4>", unsafe_allow_html=True)
-            st.bar_chart(df_log["Lesi_Terdeteksi"].value_counts(), color=C_BLUE)
+            st.markdown("<div class='glass-card'><h4 style='margin-top:0;'>Distribusi Tingkat Nyeri (Severity)</h4>", unsafe_allow_html=True)
+            if "S_Severity" in df_log.columns and not df_log["S_Severity"].dropna().empty:
+                st.bar_chart(df_log["S_Severity"].value_counts().sort_index(), color=C_PURPLE)
+            else:
+                st.info("Data tingkat nyeri belum tersedia.")
             st.markdown("</div>", unsafe_allow_html=True)
         with col_c2:
-            st.markdown("<div class='glass-card'><h4 style='margin-top:0;'>Tren Deteksi Kumulatif</h4>", unsafe_allow_html=True)
-            st.line_chart(df_log.groupby("Tanggal").size(), color=C_PURPLE)
+            st.markdown("<div class='glass-card'><h4 style='margin-top:0;'>Tren Skrining Kumulatif Harian</h4>", unsafe_allow_html=True)
+            st.line_chart(df_log.groupby("Tanggal").size(), color=C_CYAN)
             st.markdown("</div>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
