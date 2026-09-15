@@ -1,594 +1,499 @@
-import base64
-from datetime import datetime
-from io import BytesIO
+"""
+Klinik AI RSGM — Sistem Skrining Lesi Oral berbasis YOLO
+=========================================================
+Antarmuka Minimalis, Clean, dan Modern SaaS
+"""
 
-import numpy as np
-import os
+import io
+import uuid
+from datetime import datetime
+from pathlib import Path
+
 import pandas as pd
 import streamlit as st
 from PIL import Image
-from ultralytics import YOLO
 
-# --- KONFIGURASI HALAMAN ---
+try:
+    from ultralytics import YOLO
+except ImportError:
+    YOLO = None
+
+# ============================================================
+# KONFIGURASI GLOBAL
+# ============================================================
+APP_VERSION = "2.1 (Clean UI)"
+CLINIC_NAME = "RSGM Unjani"
+USER_NAME = "drg. Adinara Savero, S.KG"
+USER_ROLE = "Clinical Clerkship (Koas Aktif)"
+
+MODEL_PATH = Path("best.pt")
+DB_FILE = Path("log_deteksi.csv")
+DB_COLUMNS = [
+    "ID", "Waktu", "Tanggal", "Lesi_Terdeteksi",
+    "Confidence", "Model_Version", "Nama_File",
+]
+
+# PALET WARNA (Minimalist Medical SaaS)
+PRIMARY = "#0f766e"       # Deep Teal
+PRIMARY_LIGHT = "#ccfbf1"
+ACCENT = "#fbbf24"        # Amber
+DANGER = "#ef4444"        # Red
+DARK_TEXT = "#0f172a"     # Slate 900
+GRAY_TEXT = "#64748b"     # Slate 500
+BG_MIST = "#f8fafc"       # Slate 50
+BORDER_COLOR = "#e2e8f0"
+
+CONF_HIGH = 0.75
+CONF_MED = 0.50
+
+LESION_INFO = {
+    "cheek biting": {
+        "nama_klinis": "Morsicatio Buccarum (Cheek Biting)",
+        "deskripsi": "Lesi traumatik pada mukosa bukal akibat kebiasaan menggigit pipi berulang, umumnya tampak sebagai area putih ireguler.",
+        "rekomendasi": "Edukasi pasien untuk menghentikan kebiasaan menggigit pipi; evaluasi ulang bila lesi menetap lebih dari 2 minggu.",
+        "urgensi": "Rendah",
+    },
+    "coated tongue": {
+        "nama_klinis": "Coated Tongue (Lidah Berlapis)",
+        "deskripsi": "Lapisan putih hingga kekuningan pada dorsum lidah akibat penumpukan debris, bakteri, dan sel epitel deskuamasi.",
+        "rekomendasi": "Instruksikan pembersihan lidah rutin (tongue scraper) dan evaluasi kebersihan mulut secara umum.",
+        "urgensi": "Rendah",
+    },
+    "karies": {
+        "nama_klinis": "Karies Gigi",
+        "deskripsi": "Kerusakan jaringan keras gigi akibat proses demineralisasi oleh asam hasil metabolisme bakteri plak.",
+        "rekomendasi": "Rujuk untuk pemeriksaan klinis dan radiografis lanjutan guna menentukan rencana restorasi.",
+        "urgensi": "Sedang-Tinggi",
+    },
+    "linea alba": {
+        "nama_klinis": "Linea Alba",
+        "deskripsi": "Garis putih horizontal pada mukosa bukal sepanjang bidang oklusal, umumnya akibat tekanan/gesekan kronis dan bersifat jinak.",
+        "rekomendasi": "Umumnya tidak memerlukan tatalaksana khusus; monitor bila terjadi perubahan ukuran atau warna.",
+        "urgensi": "Rendah",
+    },
+    "lingual varicosites": {
+        "nama_klinis": "Lingual Varicosities",
+        "deskripsi": "Pelebaran vena pada permukaan ventral lidah, umum ditemukan pada individu usia lanjut, bersifat jinak.",
+        "rekomendasi": "Tidak memerlukan tatalaksana khusus kecuali disertai gejala lain; edukasi pasien mengenai sifat jinak lesi.",
+        "urgensi": "Rendah",
+    },
+    "stain calculus": {
+        "nama_klinis": "Stain & Kalkulus",
+        "deskripsi": "Deposit mineral (kalkulus) dan/atau pewarnaan ekstrinsik pada permukaan gigi akibat akumulasi plak dan faktor eksternal.",
+        "rekomendasi": "Rekomendasikan scaling profesional dan evaluasi kebiasaan oral hygiene pasien.",
+        "urgensi": "Sedang",
+    },
+    "torus": {
+        "nama_klinis": "Torus (Mandibularis/Palatinus)",
+        "deskripsi": "Eksostosis tulang jinak pada mandibula atau palatum, umumnya asimtomatik.",
+        "rekomendasi": "Tidak memerlukan tindakan kecuali mengganggu fungsi (bicara, protesa) atau membesar signifikan.",
+        "urgensi": "Rendah",
+    },
+    "ulkus traumatikus": {
+        "nama_klinis": "Ulkus Traumatikus",
+        "deskripsi": "Lesi ulseratif pada mukosa oral akibat trauma mekanis, termal, atau kimiawi, biasanya sembuh spontan.",
+        "rekomendasi": "Evaluasi ulang bila tidak sembuh dalam 10-14 hari untuk menyingkirkan diagnosis banding lain.",
+        "urgensi": "Sedang",
+    },
+}
+
+# --- KONFIGURASI HALAMAN & INJEKSI CSS ---
 st.set_page_config(page_title="Klinik AI RSGM", layout="wide", initial_sidebar_state="expanded")
 
-# ============================================================
-# DESAIN SYSTEM: FONT, WARNA, ANIMASI
-# ============================================================
-# Palet dikembangkan dari indigo yang sudah kamu pakai (#5B65DC), dibuat lebih
-# tegas untuk kontras & hierarki, ditambah teal untuk status "aman/sukses" agar
-# tidak bentrok dengan warna brand utama.
-# Font: Plus Jakarta Sans (judul & body — hangat tapi tetap presisi untuk
-# konteks klinis) + JetBrains Mono khusus untuk ANGKA (confidence, jam, ID)
-# supaya data yang dibaca mesin terasa berbeda dari teks yang ditulis manusia —
-# konvensi umum di dashboard instrumen/analitik.
-st.markdown("""
+st.markdown(f"""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap');
-
-    :root {
-        --ink: #10142C;
-        --muted: #676C93;
-        --primary: #4B4FE0;
-        --primary-dark: #2F32A8;
-        --primary-tint: #EEF0FD;
-        --teal: #0FA88A;
-        --teal-tint: #E7F8F4;
-        --amber: #C8860A;
-        --amber-tint: #FBF1DD;
-        --coral: #D8453A;
-        --coral-tint: #FBEAE8;
-        --bg: #F5F6FB;
-        --surface: #FFFFFF;
-        --border: #E5E7F5;
-    }
-
-    html, body, [class*="st-"], [data-baseweb] {
-        font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-    }
-    .mono { font-family: 'JetBrains Mono', monospace; }
-
-    .stApp { background-color: var(--bg); }
-    .stMarkdown, .stText, h1, h2, h3, h4, h5, p, label { color: var(--ink); }
-
-    /* Fokus keyboard tetap terlihat jelas (aksesibilitas) */
-    a:focus-visible, button:focus-visible, [role="radio"]:focus-visible,
-    [tabindex]:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-
-    /* Scrollbar halus */
-    ::-webkit-scrollbar { width: 8px; height: 8px; }
-    ::-webkit-scrollbar-thumb { background: #C7CBF2; border-radius: 10px; }
-    ::-webkit-scrollbar-thumb:hover { background: var(--primary); }
-
-    /* ============ SIDEBAR ============ */
-    [data-testid="stSidebar"] {
-        background-color: var(--surface);
-        border-right: 1px solid var(--border);
-    }
-    [data-testid="stSidebar"] [role="radiogroup"] { gap: 4px; }
-    [data-testid="stSidebar"] [role="radiogroup"] label {
-        padding: 9px 14px;
-        border-radius: 10px;
-        transition: background-color 0.15s ease, transform 0.1s ease;
-        width: 100%;
-    }
-    [data-testid="stSidebar"] [role="radiogroup"] label:hover {
-        background-color: var(--primary-tint);
-    }
-    [data-testid="stSidebar"] [role="radiogroup"] label[data-checked="true"] {
-        background-color: var(--primary);
-    }
-    [data-testid="stSidebar"] [role="radiogroup"] label[data-checked="true"] p {
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    
+    html, body, [class*="css"] {{ font-family: 'Inter', sans-serif !important; }}
+    .stApp {{ background-color: {BG_MIST}; }}
+    
+    /* Typography & Headers */
+    h1, h2, h3, h4, h5, h6 {{ color: {DARK_TEXT} !important; font-weight: 600 !important; letter-spacing: -0.02em; }}
+    p {{ color: {GRAY_TEXT}; }}
+    
+    /* Clean Metric Cards */
+    .metric-card {{
+        background: white;
+        border-radius: 12px;
+        padding: 24px;
+        border: 1px solid {BORDER_COLOR};
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+        margin-bottom: 20px;
+    }}
+    .metric-label {{
+        font-size: 0.875rem; 
+        color: {GRAY_TEXT};
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 8px;
+    }}
+    .metric-value {{ 
+        font-size: 2.25rem; 
+        font-weight: 600; 
+        color: {DARK_TEXT}; 
+        line-height: 1.1; 
+        margin: 0; 
+    }}
+    .metric-sub {{ font-size: 0.875rem; font-weight: 500; margin-top: 8px; }}
+    
+    /* Result Container */
+    .result-container {{
+        background: white;
+        padding: 24px;
+        border-radius: 16px;
+        border: 1px solid {BORDER_COLOR};
+        box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.05);
+        margin-top: 24px;
+    }}
+    
+    /* Buttons */
+    .stButton>button {{
+        background-color: {PRIMARY} !important;
         color: white !important;
-        font-weight: 600;
-    }
-
-    .brand-row { display: flex; align-items: center; gap: 10px; margin-bottom: 2px; }
-    .brand-title { font-weight: 800; font-size: 1.15rem; color: var(--ink); margin: 0; line-height: 1.1; }
-    .brand-sub { color: var(--primary); font-size: 0.78rem; font-weight: 600; margin: 2px 0 0 0; }
-
-    .profile-chip {
-        display: flex; align-items: center; gap: 10px;
-        background: var(--primary-tint);
-        border-radius: 12px;
-        padding: 10px 12px;
-    }
-    .profile-avatar {
-        width: 36px; height: 36px; border-radius: 50%;
-        background: var(--primary); color: white;
-        display: flex; align-items: center; justify-content: center;
-        font-weight: 700; font-size: 0.9rem; flex-shrink: 0;
-    }
-    .profile-name { font-weight: 700; font-size: 0.88rem; margin: 0; color: var(--ink); }
-    .profile-role { font-size: 0.74rem; color: var(--muted); margin: 0; }
-
-    .status-pill {
-        display: inline-flex; align-items: center; gap: 6px;
-        font-size: 0.76rem; font-weight: 600;
-        padding: 4px 10px; border-radius: 20px;
-    }
-    .status-dot { width: 7px; height: 7px; border-radius: 50%; }
-    .status-on { background: var(--teal-tint); color: var(--teal); }
-    .status-on .status-dot { background: var(--teal); }
-    .status-off { background: var(--coral-tint); color: var(--coral); }
-    .status-off .status-dot { background: var(--coral); }
-
-    @media (prefers-reduced-motion: no-preference) {
-        .status-on .status-dot { animation: pulse-dot 1.8s ease-in-out infinite; }
-    }
-    @keyframes pulse-dot {
-        0%, 100% { box-shadow: 0 0 0 0 rgba(15, 168, 138, 0.45); }
-        50% { box-shadow: 0 0 0 5px rgba(15, 168, 138, 0); }
-    }
-
-    /* ============ HERO / HEADER ============ */
-    .hero-enter { animation: none; }
-    @media (prefers-reduced-motion: no-preference) {
-        .hero-enter { animation: fadeSlideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
-    }
-    @keyframes fadeSlideUp {
-        from { opacity: 0; transform: translateY(10px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-    .page-title { font-weight: 800; font-size: 2rem; margin: 0 0 2px 0; letter-spacing: -0.02em; }
-    .page-date { color: var(--muted); font-size: 0.92rem; margin: 0 0 18px 0; }
-
-    /* ============ KPI CARDS (hierarki, bukan 3 kembar) ============ */
-    .kpi-hero {
-        background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-        border-radius: 16px;
-        padding: 22px 22px;
-        color: white;
-        box-shadow: 0 10px 24px -12px rgba(75, 79, 224, 0.55);
-    }
-    .kpi-hero .metric-label { color: rgba(255,255,255,0.75); }
-    .kpi-hero .metric-value { color: white; font-family: 'JetBrains Mono', monospace; }
-    .kpi-hero .metric-sub { color: rgba(255,255,255,0.85); }
-
-    .metric-card {
-        background-color: var(--surface);
-        border: 1px solid var(--border);
-        border-radius: 16px;
-        padding: 22px;
-        height: 100%;
-    }
-    .metric-label {
-        font-size: 0.8rem; color: var(--muted);
-        text-transform: uppercase; letter-spacing: 0.06em;
-        margin: 0 0 8px 0; font-weight: 600;
-    }
-    .metric-value {
-        font-size: 2rem; font-weight: 700; color: var(--ink);
-        margin: 0; line-height: 1.15; font-family: 'JetBrains Mono', monospace;
-    }
-    .metric-sub { font-size: 0.82rem; font-weight: 600; margin: 8px 0 0 0; color: var(--primary); }
-
-    /* ============ TABS (Upload / Kamera) ============ */
-    [data-baseweb="tab-list"] { gap: 4px; border-bottom: 1px solid var(--border); }
-    [data-baseweb="tab"] {
-        font-weight: 600; color: var(--muted);
-        padding: 10px 4px; margin-right: 20px;
-    }
-    [data-baseweb="tab"][aria-selected="true"] { color: var(--primary); }
-    [data-baseweb="tab-highlight"] { background-color: var(--primary) !important; height: 2.5px; }
-
-    /* ============ UPLOADER & KAMERA ============ */
-    [data-testid="stFileUploaderDropzone"] {
-        background-color: var(--primary-tint);
-        border: 1.5px dashed #B9BEF0;
-        border-radius: 14px;
-        transition: border-color 0.15s ease, background-color 0.15s ease;
-    }
-    [data-testid="stFileUploaderDropzone"]:hover {
-        border-color: var(--primary);
-        background-color: #E4E7FC;
-    }
-    [data-testid="stCameraInput"] video, [data-testid="stCameraInput"] img {
-        border-radius: 14px;
-    }
-
-    /* ============ TOMBOL ============ */
-    .stButton>button {
-        background-color: var(--primary);
-        color: white !important;
-        border-radius: 10px;
-        border: none;
-        padding: 12px 24px;
-        font-weight: 700;
-        font-size: 0.98rem;
-        width: 100%;
-        transition: transform 0.12s ease, box-shadow 0.12s ease, background-color 0.12s ease;
-    }
-    .stButton>button:hover {
-        background-color: var(--primary-dark);
-        box-shadow: 0 8px 18px -8px rgba(75, 79, 224, 0.55);
-        transform: translateY(-1px);
-    }
-    .stButton>button:active { transform: translateY(0); }
-    .stButton>button:disabled { background-color: #C7CBF2; color: #8489C9 !important; }
-
-    /* ============ PANEL GAMBAR + BINGKAI "VIEWFINDER" ============ */
-    /* Sudut siku-siku ini sengaja meniru bounding box yang digambar YOLO —
-       satu momen visual yang benar-benar terkait dengan fungsi aplikasi,
-       bukan sekadar dekorasi. */
-    .image-panel { margin-bottom: 14px; }
-    .image-panel-label { font-weight: 700; font-size: 0.92rem; margin: 0 0 10px 0; color: var(--ink); }
-    .viewfinder {
-        position: relative;
-        border-radius: 14px;
-        overflow: hidden;
-        background: var(--surface);
-        border: 1px solid var(--border);
-        padding: 10px;
-    }
-    .vf-img { width: 100%; display: block; border-radius: 8px; }
-    .vf-corner {
-        position: absolute; width: 22px; height: 22px;
-        border-color: var(--primary); z-index: 2; opacity: 0.85;
-    }
-    .vf-tl { top: 6px; left: 6px; border-top: 3px solid; border-left: 3px solid; border-top-left-radius: 6px; }
-    .vf-tr { top: 6px; right: 6px; border-top: 3px solid; border-right: 3px solid; border-top-right-radius: 6px; }
-    .vf-bl { bottom: 6px; left: 6px; border-bottom: 3px solid; border-left: 3px solid; border-bottom-left-radius: 6px; }
-    .vf-br { bottom: 6px; right: 6px; border-bottom: 3px solid; border-right: 3px solid; border-bottom-right-radius: 6px; }
-    @media (prefers-reduced-motion: no-preference) {
-        .vf-active .vf-corner { animation: vf-pulse 1.4s ease-in-out infinite; }
-        .vf-result .viewfinder { animation: fadeSlideUp 0.45s cubic-bezier(0.16, 1, 0.3, 1) both; }
-    }
-    @keyframes vf-pulse {
-        0%, 100% { opacity: 0.55; }
-        50% { opacity: 1; }
-    }
-
-    /* ============ KARTU HASIL & ALERT KUSTOM ============ */
-    .lesion-card {
-        background: var(--surface);
-        border: 1px solid var(--border);
-        border-left: 4px solid var(--primary);
-        border-radius: 12px;
-        padding: 14px 16px;
-        margin-bottom: 10px;
-    }
-    .conf-badge {
-        font-family: 'JetBrains Mono', monospace;
-        font-weight: 600; font-size: 0.78rem;
-        padding: 2px 9px; border-radius: 20px; color: white;
-    }
-    .app-alert {
-        border-radius: 12px;
-        padding: 14px 16px;
-        font-size: 0.92rem;
-        display: flex; gap: 10px; align-items: flex-start;
-        margin: 10px 0;
-    }
-    .app-alert.info { background: var(--primary-tint); color: var(--primary-dark); }
-    .app-alert.success { background: var(--teal-tint); color: #0B7A64; }
-    .app-alert.warning { background: var(--amber-tint); color: #8A620A; }
-    .app-alert.error { background: var(--coral-tint); color: #A6362D; }
-
-    .content-card {
-        background: var(--surface);
-        border: 1px solid var(--border);
-        border-radius: 16px;
-        padding: 24px 26px;
-    }
-
-    /* ============ MOBILE ============ */
-    @media (max-width: 768px) {
-        .page-title { font-size: 1.55rem; }
-        .kpi-hero, .metric-card { padding: 16px; border-radius: 14px; }
-        .metric-value { font-size: 1.55rem; }
-        .stButton>button { padding: 14px; font-size: 1rem; }
-        .content-card { padding: 18px; }
-    }
+        border-radius: 8px !important;
+        border: none !important;
+        padding: 12px 24px !important;
+        font-weight: 500 !important;
+        transition: all 0.2s ease !important;
+    }}
+    .stButton>button:hover {{ background-color: #115e59 !important; box-shadow: 0 4px 6px -1px rgba(15,23,42,0.1) !important; }}
+    
+    /* Badges */
+    .badge {{ padding: 4px 12px; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; display: inline-block; }}
+    .badge-low {{ background-color: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }}
+    .badge-med {{ background-color: #fffbeb; color: #b45309; border: 1px solid #fde68a; }}
+    .badge-high {{ background-color: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }}
+    .badge-score {{ background-color: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; margin-right: 8px; }}
+    
+    /* Sidebar Styling */
+    [data-testid="stSidebar"] {{ background-color: white !important; border-right: 1px solid {BORDER_COLOR}; }}
+    [data-testid="stSidebar"] * {{ color: {DARK_TEXT}; }}
+    
+    /* Hide Streamlit elements */
+    #MainMenu {{visibility: hidden;}}
+    footer {{visibility: hidden;}}
     </style>
 """, unsafe_allow_html=True)
 
-
 # ============================================================
-# KONFIGURASI DATA & MODEL
+# FUNGSI BANTU
 # ============================================================
-DB_FILE = "log_deteksi.csv"
-USER_NAME = "Adinara Savero, S.KG"
-USER_ROLE = "Mahasiswa FKG (Aktif)"
+def init_db() -> None:
+    if not DB_FILE.exists():
+        pd.DataFrame(columns=DB_COLUMNS).to_csv(DB_FILE, index=False)
+        return
+    try:
+        df = pd.read_csv(DB_FILE)
+    except pd.errors.EmptyDataError:
+        df = pd.DataFrame(columns=DB_COLUMNS)
+    except pd.errors.ParserError:
+        backup_path = DB_FILE.with_name(DB_FILE.stem + "_backup" + DB_FILE.suffix)
+        DB_FILE.rename(backup_path)
+        pd.DataFrame(columns=DB_COLUMNS).to_csv(DB_FILE, index=False)
+        return
 
+    missing = [c for c in DB_COLUMNS if c not in df.columns]
+    if missing or list(df.columns) != DB_COLUMNS:
+        for col in missing:
+            df[col] = None
+        df[DB_COLUMNS].to_csv(DB_FILE, index=False)
 
-def init_db():
-    if not os.path.exists(DB_FILE):
-        df = pd.DataFrame(columns=["Waktu", "Tanggal", "Lesi_Terdeteksi", "Confidence"])
-        df.to_csv(DB_FILE, index=False)
+def load_log() -> pd.DataFrame:
+    init_db()
+    try:
+        df = pd.read_csv(DB_FILE)
+    except pd.errors.EmptyDataError:
+        df = pd.DataFrame(columns=DB_COLUMNS)
+    df["Confidence"] = pd.to_numeric(df["Confidence"], errors="coerce")
+    return df[DB_COLUMNS]
 
-
-init_db()
-
+def append_log(records: list) -> None:
+    if not records: return
+    init_db()
+    df_new = pd.DataFrame(records)[DB_COLUMNS]
+    header = (not DB_FILE.exists()) or DB_FILE.stat().st_size == 0
+    df_new.to_csv(DB_FILE, mode="a", header=header, index=False)
 
 @st.cache_resource(show_spinner=False)
-def load_model():
-    """Model dimuat dengan aman — kalau best.pt hilang/rusak, aplikasi tetap
-    terbuka dan menampilkan status yang jelas, bukan layar error mentah."""
-    try:
-        return YOLO('best.pt')
-    except Exception:
-        return None
+def load_model(path: Path):
+    if YOLO is None or not path.exists(): return None
+    try: return YOLO(str(path))
+    except Exception: return None
 
-
-model = load_model()
-
-
-def image_to_base64(img: Image.Image, fmt: str = "PNG") -> str:
-    buffer = BytesIO()
-    img.save(buffer, format=fmt)
-    return base64.b64encode(buffer.getvalue()).decode("utf-8")
-
-
-def render_viewfinder(label: str, img: Image.Image, icon: str = "📸", active: bool = False, result: bool = False):
-    """Menampilkan gambar dalam bingkai bersudut ala viewfinder — motif yang
-    sengaja meniru bounding box YOLO, dirender sebagai satu blok HTML utuh
-    (base64) supaya bingkainya benar-benar membungkus gambar, bukan sekadar
-    div kosong yang berdiri sendiri."""
-    b64 = image_to_base64(img)
-    vf_class = "vf-active" if active else ""
-    wrapper_class = "vf-result" if result else ""
-    st.markdown(
-        f"""
-        <div class="image-panel {wrapper_class}">
-            <p class="image-panel-label">{icon} {label}</p>
-            <div class="viewfinder {vf_class}">
-                <span class="vf-corner vf-tl"></span>
-                <span class="vf-corner vf-tr"></span>
-                <span class="vf-corner vf-bl"></span>
-                <span class="vf-corner vf-br"></span>
-                <img src="data:image/png;base64,{b64}" class="vf-img" />
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def alert(message: str, kind: str = "info", icon: str = "ℹ️"):
-    """Alert bergaya sendiri (bukan kotak biru/oranye bawaan Streamlit) supaya
-    warnanya konsisten dengan palet aplikasi."""
-    st.markdown(
-        f"""<div class="app-alert {kind}"><span>{icon}</span><span>{message}</span></div>""",
-        unsafe_allow_html=True,
-    )
-
-
-def confidence_color(conf: float) -> str:
-    if conf >= 0.75:
-        return "#0FA88A"
-    if conf >= 0.5:
-        return "#C8860A"
-    return "#D8453A"
-
+def get_lesion_info(nama: str) -> dict:
+    info = LESION_INFO.get(str(nama).lower().strip())
+    if info: return info
+    return {
+        "nama_klinis": str(nama).title(),
+        "deskripsi": "Informasi klinis belum tersedia untuk anomali ini.",
+        "rekomendasi": "Evaluasi klinis mendalam oleh dokter penanggung jawab.",
+        "urgensi": "Tidak Diketahui",
+    }
 
 # ============================================================
 # SIDEBAR
 # ============================================================
 with st.sidebar:
-    st.markdown(
-        """
-        <div class="brand-row">
-            <img src="https://cdn-icons-png.flaticon.com/512/2966/2966327.png" width="34" />
-            <div>
-                <p class="brand-title">RSGM Unjani</p>
-                <p class="brand-sub">AI Dental Vision System</p>
-            </div>
+    st.markdown(f"""
+        <div style="margin-bottom: 32px;">
+            <h2 style="margin:0; font-size: 1.25rem; color: {PRIMARY} !important;">{CLINIC_NAME}</h2>
+            <p style="margin:0; font-size: 0.875rem;">AI Vision Screening</p>
         </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    st.markdown("---")
+    """, unsafe_allow_html=True)
 
-    menu = st.radio(
-        "Navigasi",
-        ["Dashboard", "Riwayat Deteksi", "Feature", "About", "Project", "Contact"],
-        label_visibility="collapsed",
-    )
-
+    menu = st.radio("Navigasi", ["Dashboard", "Riwayat Deteksi", "Analitik", "Referensi Lesi", "Sistem"], label_visibility="collapsed")
     st.markdown("---")
-    initials = "".join([w[0] for w in USER_NAME.split()[:2]]).upper()
-    st.markdown(
-        f"""
-        <div class="profile-chip">
-            <div class="profile-avatar">{initials}</div>
-            <div>
-                <p class="profile-name">{USER_NAME}</p>
-                <p class="profile-role">{USER_ROLE}</p>
-            </div>
+    
+    st.markdown("**Pengaturan Parameter**")
+    conf_threshold = st.slider("Confidence Threshold", 0.05, 0.95, 0.25, 0.05)
+    iou_threshold = st.slider("IoU (NMS) Threshold", 0.05, 0.95, 0.45, 0.05)
+    
+    st.markdown(f"""
+        <div style="margin-top: 40px; padding: 16px; background: {BG_MIST}; border-radius: 8px; border: 1px solid {BORDER_COLOR};">
+            <p style="margin: 0; font-size: 0.75rem; color: {GRAY_TEXT}; text-transform: uppercase;">Operator Aktif</p>
+            <p style="margin: 4px 0 0 0; font-weight: 600; font-size: 0.875rem;">{USER_NAME}</p>
+            <p style="margin: 0; font-size: 0.75rem; color: {GRAY_TEXT};">{USER_ROLE}</p>
         </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    st.markdown("<br>", unsafe_allow_html=True)
-    if model is not None:
-        st.markdown(
-            """<span class="status-pill status-on"><span class="status-dot"></span>Model Aktif</span>""",
-            unsafe_allow_html=True,
-        )
-    else:
-        st.markdown(
-            """<span class="status-pill status-off"><span class="status-dot"></span>Model Tidak Aktif</span>""",
-            unsafe_allow_html=True,
-        )
+    """, unsafe_allow_html=True)
 
+model = load_model(MODEL_PATH)
 
 # ============================================================
 # HALAMAN: DASHBOARD
 # ============================================================
 if menu == "Dashboard":
-    st.markdown(
-        f"""
-        <div class="hero-enter">
-            <p class="page-title">Sistem Skrining Lesi Oral</p>
-            <p class="page-date">Tanggal Hari Ini: {datetime.now().strftime('%d %B %Y')}</p>
+    col_header1, col_header2 = st.columns([3, 1])
+    with col_header1:
+        st.markdown(f"<h1 style='margin-bottom: 4px;'>Analisis Lesi Intraoral</h1>", unsafe_allow_html=True)
+        st.markdown("<p style='font-size: 1.1rem; margin-top: 0;'>Deteksi dini dan dokumentasi klinis berbasis Computer Vision.</p>", unsafe_allow_html=True)
+    with col_header2:
+        st.markdown(f"<div style='text-align: right; margin-top: 16px; font-weight: 500; color: {GRAY_TEXT};'>{datetime.now().strftime('%d %b %Y')}</div>", unsafe_allow_html=True)
+
+    st.markdown(f"""
+        <div style="background-color: {PRIMARY_LIGHT}; border: 1px solid #5eead4; border-left: 4px solid {PRIMARY}; padding: 16px; border-radius: 8px; margin-bottom: 24px;">
+            <p style="margin: 0; color: #115e59; font-size: 0.9rem;">
+                <strong>Disclaimer Medis:</strong> Hasil analisis ini bersifat penunjang. Keputusan diagnosis akhir tetap berada pada kewenangan profesional medis.
+            </p>
         </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    """, unsafe_allow_html=True)
 
-    if model is None:
-        alert(
-            "Model YOLO (<code>best.pt</code>) tidak ditemukan atau gagal dimuat. "
-            "Pastikan file berada di folder yang sama dengan aplikasi ini.",
-            kind="error", icon="⚠️",
-        )
-
-    df_log = pd.read_csv(DB_FILE)
+    df_log = load_log()
     total_deteksi = len(df_log)
     hari_ini = datetime.now().strftime("%Y-%m-%d")
     deteksi_hari_ini = len(df_log[df_log["Tanggal"] == hari_ini])
-    avg_conf = f"{df_log['Confidence'].mean() * 100:.1f}%" if total_deteksi > 0 else "0%"
+    avg_conf = f"{df_log['Confidence'].mean() * 100:.1f}%" if total_deteksi > 0 else "0.0%"
 
-    st.markdown("<br>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns(3)
-
     with col1:
         st.markdown(f"""
-        <div class="kpi-hero">
-            <p class="metric-label">Total Pemeriksaan AI</p>
+        <div class="metric-card">
+            <div class="metric-label">Total Pemeriksaan</div>
             <p class="metric-value">{total_deteksi}</p>
-            <p class="metric-sub">▲ {deteksi_hari_ini} pasien hari ini</p>
-        </div>
-        """, unsafe_allow_html=True)
-
+            <p class="metric-sub" style="color: {PRIMARY};">+{deteksi_hari_ini} tercatat hari ini</p>
+        </div>""", unsafe_allow_html=True)
     with col2:
         st.markdown(f"""
         <div class="metric-card">
-            <p class="metric-label">Rata-rata Confidence</p>
+            <div class="metric-label">Rata-rata Akurasi (Conf)</div>
             <p class="metric-value">{avg_conf}</p>
-            <p class="metric-sub">Berdasarkan YOLOv11</p>
-        </div>
-        """, unsafe_allow_html=True)
-
+            <p class="metric-sub" style="color: {GRAY_TEXT};">Berdasarkan inferensi model</p>
+        </div>""", unsafe_allow_html=True)
     with col3:
-        status_text = "Sinkron" if model is not None else "Model Error"
+        status_text = "Sistem Aktif" if model else "Model Offline"
+        status_color = PRIMARY if model else DANGER
         st.markdown(f"""
         <div class="metric-card">
-            <p class="metric-label">Status Integrasi</p>
-            <p class="metric-value" style="font-family:'Plus Jakarta Sans',sans-serif;">{status_text}</p>
-            <p class="metric-sub">Database Real-time Aktif</p>
-        </div>
-        """, unsafe_allow_html=True)
+            <div class="metric-label">Status Integrasi AI</div>
+            <p class="metric-value" style="color: {status_color};">{status_text}</p>
+            <p class="metric-sub" style="color: {GRAY_TEXT};">Backend tersinkronisasi</p>
+        </div>""", unsafe_allow_html=True)
 
-    st.markdown("<h4 style='margin-top: 26px;'>Grafik Distribusi Lesi</h4>", unsafe_allow_html=True)
-    if total_deteksi > 0:
-        chart_data = df_log.groupby(['Tanggal', 'Lesi_Terdeteksi']).size().unstack(fill_value=0)
-        st.area_chart(chart_data, use_container_width=True, color=["#4B4FE0", "#0FA88A", "#C8860A", "#D8453A"])
-    else:
-        alert("Menunggu data deteksi pertama masuk ke dalam sistem.", kind="info", icon="🕒")
-
-    st.markdown("---")
-    st.markdown("<h4>Modul Analisis Citra Klinis</h4>", unsafe_allow_html=True)
-
-    tab_unggah, tab_kamera = st.tabs(["Upload", "Kamera"])
-
-    image = None
+    st.markdown("<div style='background: white; padding: 24px; border-radius: 12px; border: 1px solid #e2e8f0;'>", unsafe_allow_html=True)
+    st.markdown("### Modul Akuisisi Gambar")
+    
+    tab_unggah, tab_kamera = st.tabs(["Unggah Berkas", "Kamera Perangkat"])
+    images_to_process, file_names = [], []
 
     with tab_unggah:
-        uploaded_file = st.file_uploader("Pilih foto intraoral dari penyimpanan perangkat", type=["jpg", "jpeg", "png"])
-        if uploaded_file is not None:
-            image = Image.open(uploaded_file).convert('RGB')
+        uploaded_files = st.file_uploader("Pilih file gambar intraoral", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
+        if uploaded_files:
+            for f in uploaded_files:
+                try:
+                    images_to_process.append(Image.open(f).convert("RGB"))
+                    file_names.append(f.name)
+                except Exception: pass
 
     with tab_kamera:
-        camera_file = st.camera_input("Ambil gambar lesi secara langsung (gunakan ikon rotate kamera bawaan HP untuk opsi depan/belakang)")
+        camera_file = st.camera_input("Ambil gambar secara langsung")
         if camera_file is not None:
-            image = Image.open(camera_file).convert('RGB')
+            try:
+                images_to_process.append(Image.open(camera_file).convert("RGB"))
+                file_names.append("Cam_" + datetime.now().strftime("%H%M%S") + ".jpg")
+            except Exception: pass
 
-    if image is not None:
-        st.markdown("<br>", unsafe_allow_html=True)
-        col_img1, col_img2 = st.columns(2, gap="large")
-
-        with col_img1:
-            render_viewfinder("Citra Klinis Masukan", image, icon="📸", active=True)
-            st.markdown("<br>", unsafe_allow_html=True)
-            analyze_btn = st.button('Mulai Analisis YOLO', use_container_width=True, disabled=(model is None))
+    if images_to_process:
+        analyze_btn = st.button("Mulai Proses Inferensi YOLO", use_container_width=True, disabled=(model is None))
 
         if analyze_btn and model is not None:
-            with st.spinner('Memindai anomali dental...'):
-                results = model(image)
-                res_plotted_bgr = results[0].plot()
-                res_plotted = Image.fromarray(res_plotted_bgr[:, :, ::-1])  # BGR -> RGB
+            progress = st.progress(0, text="Menginisialisasi analisis...")
+            all_new_records = []
+            
+            for idx, (image, f_name) in enumerate(zip(images_to_process, file_names)):
+                progress.progress((idx + 1) / len(images_to_process), text=f"Memproses {f_name}...")
+                try:
+                    results = model(image, conf=conf_threshold, iou=iou_threshold, verbose=False)
+                except Exception as e:
+                    st.error(f"Gagal memproses {f_name}: {e}")
+                    continue
 
+                res_plotted = results[0].plot()
                 boxes = results[0].boxes
-                if len(boxes) > 0:
-                    new_records = []
-                    waktu_sekarang = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    tanggal_sekarang = datetime.now().strftime("%Y-%m-%d")
+                detections = []
+                
+                for box in boxes:
+                    class_id = int(box.cls[0].item())
+                    conf_score = float(box.conf[0].item())
+                    nama_lesi = model.names[class_id]
+                    detections.append((nama_lesi, conf_score))
+                    all_new_records.append({
+                        "ID": str(uuid.uuid4())[:8],
+                        "Waktu": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "Tanggal": datetime.now().strftime("%Y-%m-%d"),
+                        "Lesi_Terdeteksi": nama_lesi,
+                        "Confidence": round(conf_score, 4),
+                        "Model_Version": MODEL_PATH.name,
+                        "Nama_File": f_name,
+                    })
 
-                    for box in boxes:
-                        class_id = int(box.cls[0].item())
-                        conf_score = float(box.conf[0].item())
-                        nama_lesi = model.names[class_id]
-
-                        new_records.append({
-                            "Waktu": waktu_sekarang,
-                            "Tanggal": tanggal_sekarang,
-                            "Lesi_Terdeteksi": nama_lesi,
-                            "Confidence": round(conf_score, 2)
-                        })
-
-                    df_new = pd.DataFrame(new_records)
-                    df_new.to_csv(DB_FILE, mode='a', header=False, index=False)
-
+                # Tampilan Sejajar Hasil (Clean Layout)
+                st.markdown(f"<div class='result-container'>", unsafe_allow_html=True)
+                st.markdown(f"#### Hasil Analisis: {f_name}")
+                
+                col_img1, col_img2 = st.columns(2)
+                with col_img1:
+                    st.markdown("<p style='font-size: 0.875rem; font-weight: 500; margin-bottom: 8px;'>Citra Asli</p>", unsafe_allow_html=True)
+                    st.image(image, use_container_width=True)
                 with col_img2:
-                    render_viewfinder("Hasil Pemetaan Bounding Box", res_plotted, icon="🧬", result=True)
+                    st.markdown("<p style='font-size: 0.875rem; font-weight: 500; margin-bottom: 8px;'>Pemetaan Bounding Box</p>", unsafe_allow_html=True)
+                    st.image(res_plotted, use_container_width=True)
 
-                    if len(boxes) == 0:
-                        alert("Jaringan sehat / tidak ada lesi yang terdeteksi secara spesifik.", kind="warning", icon="🦷")
-                    else:
-                        alert("Log pasien berhasil diperbarui ke database.", kind="success", icon="✅")
-                        for box in boxes:
-                            class_id = int(box.cls[0].item())
-                            conf_score = float(box.conf[0].item())
-                            nama_lesi = model.names[class_id]
-                            color = confidence_color(conf_score)
-                            st.markdown(
-                                f"""<div class="lesion-card">
-                                <b>{nama_lesi.title()}</b>
-                                <span class="conf-badge" style="background:{color};">{conf_score*100:.1f}%</span>
-                                </div>""",
-                                unsafe_allow_html=True,
-                            )
+                if not detections:
+                    st.info("Tidak terdeteksi adanya anomali klinis berdasarkan parameter ambang batas.")
+                else:
+                    st.markdown("<hr style='margin: 24px 0; border-color: #f1f5f9;'>", unsafe_allow_html=True)
+                    st.markdown("##### Rincian Identifikasi")
+                    for nama_lesi, conf_score in sorted(detections, key=lambda x: -x[1]):
+                        info = get_lesion_info(nama_lesi)
+                        urg = info['urgensi']
+                        badge_class = "badge-high" if "Tinggi" in urg else "badge-med" if urg == "Sedang" else "badge-low"
+                        
+                        st.markdown(f"""
+                            <div style="background: {BG_MIST}; border-radius: 8px; padding: 16px; margin-bottom: 12px; border: 1px solid {BORDER_COLOR}; border-left: 4px solid {PRIMARY};">
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                                    <span style="font-weight: 600; font-size: 1rem; color: {DARK_TEXT};">{info['nama_klinis']}</span>
+                                    <div>
+                                        <span class="badge badge-score">Conf: {conf_score*100:.1f}%</span>
+                                        <span class="badge {badge_class}">Urgensi: {info['urgensi']}</span>
+                                    </div>
+                                </div>
+                                <p style="font-size: 0.875rem; color: {GRAY_TEXT}; margin-bottom: 12px;">{info['deskripsi']}</p>
+                                <div style="background: white; border-radius: 6px; padding: 12px; border: 1px solid {BORDER_COLOR}; font-size: 0.875rem;">
+                                    <strong>Tindakan Medis:</strong> {info['rekomendasi']}
+                                </div>
+                            </div>
+                        """, unsafe_allow_html=True)
+                st.markdown("</div>", unsafe_allow_html=True)
 
+            progress.progress(1.0, text="Selesai.")
+            append_log(all_new_records)
+    st.markdown("</div>", unsafe_allow_html=True)
 
+# ============================================================
+# HALAMAN LAINNYA
+# ============================================================
 elif menu == "Riwayat Deteksi":
-    st.markdown("<p class='page-title'>Riwayat Data Pasien</p>", unsafe_allow_html=True)
-    df_log = pd.read_csv(DB_FILE)
+    st.markdown("## Database Pemeriksaan")
+    st.markdown("Arsip historis deteksi klinis yang terekam dalam sistem lokal.")
+    df_log = load_log()
+
     if df_log.empty:
-        alert("Belum ada data deteksi yang tercatat.", kind="info", icon="🗂️")
+        st.info("Basis data log saat ini kosong.")
     else:
-        st.dataframe(df_log, use_container_width=True)
-        with open(DB_FILE, "rb") as file:
-            st.download_button("⬇️ Unduh Laporan CSV", data=file, file_name="Laporan_Deteksi_Lesi.csv", mime="text/csv")
+        st.markdown("<div style='background: white; padding: 24px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 24px;'>", unsafe_allow_html=True)
+        col_f1, col_f2, col_f3 = st.columns(3)
+        with col_f1:
+            opts = sorted(df_log["Lesi_Terdeteksi"].dropna().unique().tolist())
+            selected_lesi = st.multiselect("Filter Jenis Lesi", opts, default=opts)
+        with col_f2:
+            tgl_series = pd.to_datetime(df_log["Tanggal"], errors="coerce").dropna()
+            date_range = st.date_input("Rentang Waktu", value=(tgl_series.min(), tgl_series.max())) if not tgl_series.empty else None
+        with col_f3:
+            min_conf = st.slider("Batas Minimum Confidence", 0.0, 1.0, 0.0)
+        st.markdown("</div>", unsafe_allow_html=True)
 
-elif menu == "Feature":
-    st.markdown("<p class='page-title'>Fitur Sistem</p>", unsafe_allow_html=True)
-    st.markdown(
-        """<div class="content-card">Sistem inferensi didukung arsitektur YOLOv11. Pemantauan metrik dan
-        distribusi disinkronkan ke dalam dashboard secara real-time.</div>""",
-        unsafe_allow_html=True,
-    )
+        mask = df_log["Lesi_Terdeteksi"].isin(selected_lesi) & (df_log["Confidence"].fillna(0) >= min_conf)
+        if date_range and isinstance(date_range, tuple) and len(date_range) == 2:
+            t_start, t_end = pd.to_datetime(date_range[0]), pd.to_datetime(date_range[1])
+            mask &= (pd.to_datetime(df_log["Tanggal"], errors="coerce") >= t_start) & (pd.to_datetime(df_log["Tanggal"], errors="coerce") <= t_end)
 
-elif menu == "About":
-    st.markdown("<p class='page-title'>Tentang Aplikasi</p>", unsafe_allow_html=True)
-    st.markdown(
-        """<div class="content-card">Aplikasi skrining ini dirancang untuk memfasilitasi pengambilan keputusan
-        klinis dan mendukung kolaborasi interprofesional.</div>""",
-        unsafe_allow_html=True,
-    )
+        df_filtered = df_log[mask]
+        st.dataframe(df_filtered, use_container_width=True)
+        
+        col_dl1, col_dl2 = st.columns(2)
+        with col_dl1:
+            st.download_button("Ekspor Format CSV", data=df_filtered.to_csv(index=False).encode("utf-8"), file_name="Riwayat_Klinis.csv", mime="text/csv", use_container_width=True)
+        with col_dl2:
+            try:
+                buffer = io.BytesIO()
+                with pd.ExcelWriter(buffer, engine="openpyxl") as writer: df_filtered.to_excel(writer, index=False)
+                st.download_button("Ekspor Format Excel", data=buffer.getvalue(), file_name="Riwayat_Klinis.xlsx", use_container_width=True)
+            except ImportError: pass
 
-elif menu == "Project":
-    st.markdown("<p class='page-title'>Project Overview</p>", unsafe_allow_html=True)
-    st.markdown(
-        """<div class="content-card">Dokumentasi <i>confusion matrix</i> dan performa uji hipotesis dari
-        iterasi model pelatihan akan ditampilkan di sini.</div>""",
-        unsafe_allow_html=True,
-    )
+elif menu == "Analitik":
+    st.markdown("## Tinjauan Analitik")
+    df_log = load_log()
+    if df_log.empty: st.info("Tidak ada data analitik tersedia.")
+    else:
+        col_s1, col_s2 = st.columns(2)
+        with col_s1:
+            st.markdown("<div class='metric-card'><div class='metric-label'>Distribusi Prevalensi Lesi</div>", unsafe_allow_html=True)
+            st.bar_chart(df_log["Lesi_Terdeteksi"].value_counts())
+            st.markdown("</div>", unsafe_allow_html=True)
+        with col_s2:
+            st.markdown("<div class='metric-card'><div class='metric-label'>Tren Skrining Harian</div>", unsafe_allow_html=True)
+            st.line_chart(df_log.groupby("Tanggal").size())
+            st.markdown("</div>", unsafe_allow_html=True)
 
-elif menu == "Contact":
-    st.markdown("<p class='page-title'>Hubungi Pengembang</p>", unsafe_allow_html=True)
-    st.markdown(
-        """<div class="content-card">Untuk kebutuhan kalibrasi model, silakan hubungi tim administrator klinis.</div>""",
-        unsafe_allow_html=True,
-    )
+elif menu == "Referensi Lesi":
+    st.markdown("## Ensiklopedia Lesi Oral")
+    for key, info in LESION_INFO.items():
+        badge_class = "badge-high" if "Tinggi" in info['urgensi'] else "badge-med" if info['urgensi'] == "Sedang" else "badge-low"
+        st.markdown(f"""
+            <div style="background: white; border-radius: 12px; padding: 24px; border: 1px solid {BORDER_COLOR}; margin-bottom: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid {BORDER_COLOR}; padding-bottom: 12px; margin-bottom: 12px;">
+                    <h4 style="margin: 0; color: {PRIMARY} !important;">{info['nama_klinis']}</h4>
+                    <span class="badge {badge_class}">{info['urgensi']}</span>
+                </div>
+                <p style="color: {GRAY_TEXT}; margin-bottom: 16px;">{info['deskripsi']}</p>
+                <div style="background: {BG_MIST}; padding: 12px 16px; border-radius: 8px; font-size: 0.875rem;">
+                    <strong>Panduan Klinis:</strong> {info['rekomendasi']}
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+
+elif menu == "Sistem":
+    st.markdown("## Informasi Infrastruktur")
+    st.markdown(f"""
+    <div style='background: white; padding: 32px; border-radius: 12px; border: 1px solid {BORDER_COLOR};'>
+        <h4 style="margin-top:0;">Spesifikasi Deployment</h4>
+        <ul style="color: {GRAY_TEXT};">
+            <li><strong>Framework:</strong> Streamlit / Python 3</li>
+            <li><strong>Architecture:</strong> YOLO by Ultralytics</li>
+            <li><strong>Environment:</strong> Frontend terintegrasi backend lokal</li>
+        </ul>
+        <hr style="border-color: {BORDER_COLOR}; margin: 24px 0;">
+        <h4>Kontak Dukungan</h4>
+        <p style="color: {GRAY_TEXT};">Pembaruan parameter bobot atau manajemen instans dapat dilakukan melalui administrator server utama institusi terkait.</p>
+    </div>
+    """, unsafe_allow_html=True)
