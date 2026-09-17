@@ -1,5 +1,5 @@
 """
-Klinik AI RSGM — Sistem Skrining Lesi Oral berbasis YOLO
+MAMMOUTH — MY ASSISTANT IN MOUTH HEALTH
 =========================================================
 Antarmuka: Frost UI, Clean, dan Modern SaaS
 Fitur Baru: Login, OLD CARTS, Batch Upload, EMR Export, AI Synthesis
@@ -23,7 +23,7 @@ except ImportError:
 # KONFIGURASI GLOBAL & DATABASE
 # ============================================================
 APP_VERSION = "3.0 (Frost UI & OLD CARTS Integration)"
-CLINIC_NAME = "RSGM Unjani"
+CLINIC_NAME = "MAMMOUTH"
 USER_NAME = "drg. Adinara Savero, S.KG"
 USER_ROLE = "Clinical Clerkship (Koas Aktif)"
 
@@ -108,7 +108,7 @@ if 'logged_in' not in st.session_state:
 if 'anamnesis_data' not in st.session_state:
     st.session_state.anamnesis_data = None
 
-st.set_page_config(page_title="Klinik AI RSGM", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="MY ASSISTANT IN MOUTH HEALTH", layout="wide", initial_sidebar_state="expanded")
 
 # ============================================================
 # FUNGSI BANTU & LOGIKA AI
@@ -239,8 +239,8 @@ if not st.session_state.logged_in:
             <div class="login-card">
                 <div style="text-align: center; margin-bottom: 30px;">
                     <div style="width: 48px; height: 48px; background: {PRIMARY_LIGHT}; color: {PRIMARY}; border-radius: 14px; display: inline-flex; align-items: center; justify-content: center; font-size: 24px; font-weight: bold; margin-bottom: 15px;">✦</div>
-                    <h2 style="margin: 0; color: {DARK_TEXT}; font-weight: 800; font-size: 1.5rem;">RSGM UNJANI</h2>
-                    <p style="margin: 5px 0 0 0; color: {GRAY_TEXT}; font-size: 0.9rem;">Clinical Intelligence Workspace</p>
+                    <h2 style="margin: 0; color: {DARK_TEXT}; font-weight: 800; font-size: 1.5rem;">MAMMOUTH</h2>
+                    <p style="margin: 5px 0 0 0; color: {GRAY_TEXT}; font-size: 0.9rem;">MY ASSISTANT IN MOUTH HEALTH</p>
                 </div>
     """, unsafe_allow_html=True)
     
@@ -352,7 +352,7 @@ with st.sidebar:
         </div>
     """, unsafe_allow_html=True)
 
-    menu = st.radio("Navigasi", ["Dashboard", "Riwayat Deteksi", "Analitik", "Referensi Lesi", "Sistem"], label_visibility="collapsed")
+    menu = st.radio("Navigasi", ["Dashboard", "History", "Analytic", "Preference", "System"], label_visibility="collapsed")
     st.markdown("---")
     
     st.markdown("<p style='font-size: 0.75rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 5px;'>Pengaturan Model</p>", unsafe_allow_html=True)
