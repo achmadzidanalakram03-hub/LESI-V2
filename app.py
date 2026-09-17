@@ -2,7 +2,7 @@
 MAMMOUTH — MY ASSISTANT IN MOUTH HEALTH
 =========================================================
 Antarmuka: Frost UI Premium, Clean, dan Modern SaaS
-Fitur: Multi-User Auth, SQLite Database, Data Isolation, OLD CARTS, Batch Upload, AI Synthesis
+Fitur: Multi-User Auth, SQLite Database, Data Isolation, OLD CARTS, Batch Upload, AI Synthesis, Live Preview
 """
 
 import io
@@ -24,7 +24,7 @@ except ImportError:
 # ============================================================
 # KONFIGURASI GLOBAL
 # ============================================================
-APP_VERSION = "5.0 (Independent Multi-User System)"
+APP_VERSION = "5.1 (Multi-User + Live Preview)"
 APP_NAME = "MAMMOUTH"
 DB_FILE = "mammouth.db"
 
@@ -433,13 +433,25 @@ if menu == "Dashboard Skrining":
         col_adj1, col_adj2 = st.columns(2)
         with col_adj1: bright_factor = st.slider("Kecerahan (Brightness)", 0.5, 2.0, 1.0, 0.1)
         with col_adj2: cont_factor = st.slider("Kontras (Contrast)", 0.5, 2.0, 1.0, 0.1)
+        
+        st.markdown("#### Live Preview")
+        preview_cols = st.columns(min(len(raw_images), 3) if len(raw_images) > 0 else 1)
 
-        for img in raw_images:
+        for idx, img in enumerate(raw_images):
             enhancer = ImageEnhance.Brightness(img)
             img_adj = enhancer.enhance(bright_factor)
             enhancer = ImageEnhance.Contrast(img_adj)
             img_adj = enhancer.enhance(cont_factor)
             images_to_process.append(img_adj)
+            
+            with preview_cols[idx % 3]:
+                st.image(img_adj, caption=f"Preview: {file_names[idx]}", use_container_width=True)
+
+        st.markdown("---")
+
+        # Peringatan error jika model belum berhasil di-load
+        if model is None:
+            st.error(f"⚠️ Sistem gagal memuat bobot model {st.session_state.yolo_version}. Pastikan file (misal: best.pt) ada di repositori dan requirements.txt sudah sesuai.")
 
         analyze_btn = st.button(f"JALANKAN INFERENSI ({st.session_state.yolo_version})", use_container_width=True, disabled=(model is None))
 
@@ -477,11 +489,7 @@ if menu == "Dashboard Skrining":
                                 all_new_records.append({**base_record, "Lesi_Terdeteksi": nama_lesi, "Confidence": round(conf_score, 4)})
 
                         st.markdown(f"#### Hasil Analisis: {f_name}")
-                        col_img1, col_img2 = st.columns(2)
-                        with col_img1:
-                            st.image(image, caption="Citra Input (Disesuaikan)", use_container_width=True)
-                        with col_img2:
-                            st.image(res_plotted, caption=f"Overlay Bounding Box ({st.session_state.yolo_version})", use_container_width=True)
+                        st.image(res_plotted, caption=f"Overlay Bounding Box ({st.session_state.yolo_version})", use_container_width=True)
 
                         if detections:
                             st.markdown(f"""
