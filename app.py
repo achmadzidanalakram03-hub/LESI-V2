@@ -352,7 +352,7 @@ with st.sidebar:
         </div>
     """, unsafe_allow_html=True)
 
-    menu = st.radio("Navigasi", ["Dashboard", "History", "Analytic", "Preference", "System"], label_visibility="collapsed")
+    menu = st.radio("Navigasi", ["Dashboard", "Riwayat Analitik", "Analitik", "Referensi Lesi", "Sistem"], label_visibility="collapsed")
     st.markdown("---")
     
     st.markdown("<p style='font-size: 0.75rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 5px;'>Pengaturan Model</p>", unsafe_allow_html=True)
