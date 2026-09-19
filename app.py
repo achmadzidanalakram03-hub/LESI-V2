@@ -3,12 +3,13 @@ MAMMOUTH — My Assistant in Mouth Health
 =======================================
 Platform skrining kesehatan rongga mulut berbasis computer vision.
 
-v6.0 — Proyek independen.
+v6.1 — Proyek independen.
 Fitur utama:
   • Akun mandiri (registrasi terbuka) dengan isolasi data penuh per pengguna
   • Penyimpanan permanen: SQLite relasional + arsip citra per akun di disk
   • Rekam medis pasien (bukan sekadar log gambar): pasien → pemeriksaan → deteksi
-  • Anamnesis OLD CARTS terintegrasi dengan sintesis klinis berbasis aturan
+  • Anamnesis OLD CARTS + tanda-tanda vital (TD, nadi, napas, BB/TB, IMT otomatis)
+  • Anamnesis dan tanda vital terintegrasi dengan sintesis klinis berbasis aturan
   • Analitik, laporan cetak, ekspor penuh (ZIP), dan mode demo tanpa bobot model
 
 Jalankan:  streamlit run app.py
@@ -86,7 +87,7 @@ _install_compat_shim()
 # ============================================================
 APP_NAME = "Mammouth"
 APP_TAGLINE = "My Assistant in Mouth Health"
-APP_VERSION = "6.0"
+APP_VERSION = "6.1"
 
 DATA_DIR = Path(os.environ.get("MAMMOUTH_DATA_DIR", "mammouth_data"))
 DB_FILE = DATA_DIR / "mammouth.db"
@@ -259,7 +260,8 @@ html, body, [class*="css"], .stApp, input, textarea, select, button {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 .stApp { background: var(--bg); color: var(--text); }
-.block-container { padding-top: 2.2rem; padding-bottom: 4rem; max-width: 1320px; }
+.block-container { padding-top: 2.5rem; padding-bottom: 4.5rem; max-width: 1320px; }
+.block-container > div[data-testid="stVerticalBlock"] { gap: 1.3rem; }
 
 h1, h2, h3, h4, h5 {
     font-family: 'Space Grotesk', 'Inter', sans-serif !important;
@@ -267,48 +269,51 @@ h1, h2, h3, h4, h5 {
     letter-spacing: -0.015em;
 }
 h1 { font-size: 2.1rem !important; font-weight: 700 !important; }
-h2 { font-size: 1.5rem !important; font-weight: 600 !important; }
-h3 { font-size: 1.15rem !important; font-weight: 600 !important; }
+h2 { font-size: 1.5rem !important; font-weight: 600 !important; margin: 1.9rem 0 .9rem 0 !important; }
+h3 { font-size: 1.15rem !important; font-weight: 600 !important; margin: 1.7rem 0 .8rem 0 !important; }
 p, li, label, span, div { color: var(--text); }
 a { color: var(--primary); }
 
 /* --- Judul halaman --- */
-.page-head { margin-bottom: 1.4rem; }
-.page-head h1 { margin: 0 0 .25rem 0; }
-.page-head p { color: var(--muted); margin: 0; font-size: .95rem; max-width: 70ch; }
+.page-head { margin-bottom: 2rem; }
+.page-head h1 { margin: 0 0 .4rem 0; }
+.page-head p { color: var(--muted); margin: 0; font-size: .95rem; max-width: 70ch; line-height: 1.55; }
 
 /* --- Kontainer berbingkai bawaan Streamlit --- */
 [data-testid="stVerticalBlockBorderWrapper"] {
     background: var(--surface);
     border-radius: 14px;
 }
-[data-testid="stVerticalBlockBorderWrapper"] > div > [data-testid="stVerticalBlock"] { gap: .85rem; }
+[data-testid="stVerticalBlockBorderWrapper"] > div > [data-testid="stVerticalBlock"] { gap: 1.05rem; }
 div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVerticalBlock"]) {
     border-color: var(--border) !important;
 }
+
+/* --- Kolom berdampingan --- */
+[data-testid="stHorizontalBlock"] { gap: 1.4rem; align-items: flex-start; }
 
 /* --- Kartu --- */
 .card {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 14px;
-    padding: 18px 20px;
+    padding: 22px 24px;
     box-shadow: var(--shadow);
 }
 .kpi {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 14px;
-    padding: 16px 18px;
+    padding: 20px 22px;
     height: 100%;
 }
-.kpi .label { color: var(--muted); font-size: .78rem; font-weight: 600; margin: 0; }
+.kpi .label { color: var(--muted); font-size: .78rem; font-weight: 600; margin: 0; letter-spacing: .01em; }
 .kpi .value {
     font-family: 'Space Grotesk', sans-serif;
-    font-size: 2rem; font-weight: 700; line-height: 1.15; margin: 4px 0 0 0;
+    font-size: 2rem; font-weight: 700; line-height: 1.2; margin: 8px 0 0 0;
     font-variant-numeric: tabular-nums;
 }
-.kpi .sub { color: var(--muted); font-size: .78rem; margin: 2px 0 0 0; }
+.kpi .sub { color: var(--muted); font-size: .78rem; margin: 6px 0 0 0; }
 
 /* --- Pita urgensi pada hasil --- */
 .verdict {
@@ -316,18 +321,18 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVert
     border-left: 5px solid var(--primary);
     border-radius: 12px;
     background: var(--surface);
-    padding: 16px 18px;
-    margin: 6px 0 12px 0;
+    padding: 18px 22px;
+    margin: 14px 0 20px 0;
 }
-.verdict .title { font-family:'Space Grotesk',sans-serif; font-weight: 600; font-size: 1.02rem; margin: 0 0 6px 0; }
-.verdict .body { color: var(--text); font-size: .92rem; margin: 0; line-height: 1.55; }
+.verdict .title { font-family:'Space Grotesk',sans-serif; font-weight: 600; font-size: 1.02rem; margin: 0 0 8px 0; }
+.verdict .body { color: var(--text); font-size: .92rem; margin: 0; line-height: 1.6; }
 .verdict.u-tinggi { border-left-color: var(--danger); }
 .verdict.u-sedang { border-left-color: var(--warn); }
 .verdict.u-rendah { border-left-color: var(--ok); }
 
 /* --- Lencana --- */
 .pill {
-    display: inline-block; padding: 3px 10px; border-radius: 999px;
+    display: inline-block; padding: 4px 12px; border-radius: 999px;
     font-size: .72rem; font-weight: 600; border: 1px solid transparent; white-space: nowrap;
 }
 .pill.low  { background: var(--ok-soft);     color: var(--ok);     border-color: var(--ok); }
@@ -337,36 +342,53 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVert
 
 /* --- Baris deteksi --- */
 .det-row {
-    display: flex; align-items: center; justify-content: space-between; gap: 12px;
-    padding: 10px 0; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    padding: 13px 2px; border-bottom: 1px solid var(--border);
 }
 .det-row:last-child { border-bottom: none; }
 .det-name { font-weight: 600; font-size: .92rem; }
-.det-sub { color: var(--muted); font-size: .78rem; }
+.det-sub { color: var(--muted); font-size: .78rem; margin-top: 2px; }
 .meter { height: 6px; border-radius: 99px; background: var(--surface2); width: 120px; overflow: hidden; }
 .meter > span { display: block; height: 100%; background: var(--primary); }
 
+/* --- Kartu ringkas tanda vital --- */
+.vital-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+    gap: 14px; margin: 4px 0 4px 0;
+}
+.vital-cell {
+    border: 1px solid var(--border); border-radius: 12px; background: var(--surface2);
+    padding: 12px 14px;
+}
+.vital-cell .vlabel { color: var(--muted); font-size: .72rem; font-weight: 600; margin: 0; letter-spacing: .01em; }
+.vital-cell .vvalue {
+    font-family: 'Space Grotesk', sans-serif; font-size: 1.15rem; font-weight: 700;
+    margin: 6px 0 0 0; font-variant-numeric: tabular-nums;
+}
+
 /* --- Sidebar --- */
 [data-testid="stSidebar"] { background: var(--surface) !important; border-right: 1px solid var(--border); }
-[data-testid="stSidebar"] .block-container { padding-top: 1.5rem; }
-.brand { display: flex; align-items: baseline; gap: 8px; margin-bottom: 2px; }
+[data-testid="stSidebar"] .block-container { padding-top: 1.8rem; }
+[data-testid="stSidebar"] [data-testid="stVerticalBlock"] { gap: 1.1rem; }
+.brand { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; }
 .brand .mark {
     font-family: 'Space Grotesk', sans-serif; font-weight: 700;
     font-size: 1.45rem; color: var(--primary); letter-spacing: -.03em;
 }
 .brand .ver { font-size: .68rem; color: var(--muted); font-weight: 600; }
-.brand-sub { color: var(--muted); font-size: .74rem; margin: 0 0 14px 0; }
+.brand-sub { color: var(--muted); font-size: .74rem; margin: 0 0 20px 0; }
 .who {
-    border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px;
-    background: var(--surface2); margin-top: 8px;
+    border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px;
+    background: var(--surface2); margin-top: 12px;
 }
 .who .name { font-weight: 600; font-size: .9rem; margin: 0; }
-.who .role { color: var(--muted); font-size: .76rem; margin: 2px 0 0 0; }
+.who .role { color: var(--muted); font-size: .76rem; margin: 3px 0 0 0; }
 
 /* --- Tombol --- */
 .stButton > button, .stDownloadButton > button, .stFormSubmitButton > button {
     border-radius: 10px !important;
     font-weight: 600 !important;
+    padding: .55rem 1.15rem !important;
     border: 1px solid var(--border) !important;
     background: var(--surface) !important;
     color: var(--text) !important;
@@ -389,17 +411,23 @@ input, textarea, [data-baseweb="select"] > div {
     color: var(--text) !important;
     border-color: var(--border) !important;
 }
-[data-testid="stWidgetLabel"] p { font-size: .84rem; font-weight: 600; color: var(--text); }
+[data-testid="stWidgetLabel"] p { font-size: .84rem; font-weight: 600; color: var(--text); margin-bottom: .2rem; }
+[data-testid="stForm"] [data-testid="stVerticalBlock"] { gap: 1rem; }
 
 /* --- Tab --- */
-.stTabs [data-baseweb="tab-list"] { gap: 4px; border-bottom: 1px solid var(--border); }
-.stTabs [data-baseweb="tab"] { border-radius: 8px 8px 0 0; padding: 8px 16px; font-weight: 600; font-size: .9rem; }
+.stTabs [data-baseweb="tab-list"] { gap: 6px; border-bottom: 1px solid var(--border); }
+.stTabs [data-baseweb="tab"] { border-radius: 8px 8px 0 0; padding: 10px 20px; font-weight: 600; font-size: .9rem; }
 .stTabs [aria-selected="true"] { color: var(--primary) !important; background: var(--primary-soft) !important; }
+.stTabs [data-baseweb="tab-panel"] { padding-top: 1.1rem; }
 
 /* --- Ekspander, tabel, metrik --- */
-[data-testid="stExpander"] { border: 1px solid var(--border) !important; border-radius: 12px !important; background: var(--surface); }
+[data-testid="stExpander"] {
+    border: 1px solid var(--border) !important; border-radius: 12px !important; background: var(--surface);
+    margin-bottom: .2rem;
+}
+[data-testid="stExpander"] summary { padding: .6rem .9rem !important; }
 [data-testid="stDataFrame"] { border: 1px solid var(--border); border-radius: 12px; }
-hr { border-color: var(--border); }
+hr { border-color: var(--border); margin: 1.6rem 0; }
 [data-testid="stCameraInput"] button { border-radius: 10px !important; }
 
 /* --- Halaman masuk --- */
@@ -408,15 +436,15 @@ hr { border-color: var(--border); }
     font-family: 'Space Grotesk', sans-serif; font-size: 3.4rem; font-weight: 700;
     color: var(--primary); letter-spacing: -.045em; line-height: 1; margin: 0;
 }
-.auth-hero .tag { font-size: 1.02rem; color: var(--text); margin: 10px 0 0 0; font-weight: 500; }
-.auth-hero .lede { color: var(--muted); font-size: .95rem; margin: 14px 0 0 0; max-width: 46ch; line-height: 1.6; }
-.auth-list { list-style: none; padding: 0; margin: 22px 0 0 0; }
+.auth-hero .tag { font-size: 1.02rem; color: var(--text); margin: 12px 0 0 0; font-weight: 500; }
+.auth-hero .lede { color: var(--muted); font-size: .95rem; margin: 16px 0 0 0; max-width: 46ch; line-height: 1.65; }
+.auth-list { list-style: none; padding: 0; margin: 26px 0 0 0; }
 .auth-list li {
-    padding: 9px 0 9px 20px; border-top: 1px solid var(--border);
+    padding: 11px 0 11px 22px; border-top: 1px solid var(--border);
     font-size: .88rem; color: var(--text); position: relative;
 }
-.auth-list li::before { content: ""; position: absolute; left: 0; top: 17px; width: 8px; height: 8px; border-radius: 2px; background: var(--primary); }
-.tooth-plot { margin-top: 26px; }
+.auth-list li::before { content: ""; position: absolute; left: 0; top: 19px; width: 8px; height: 8px; border-radius: 2px; background: var(--primary); }
+.tooth-plot { margin-top: 30px; }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 footer, #MainMenu { visibility: hidden; }
@@ -494,6 +522,8 @@ CREATE TABLE IF NOT EXISTS exams (
     synthesis     TEXT,
     o_onset       TEXT, l_location TEXT, d_duration TEXT, c_character TEXT,
     a_aggravating TEXT, r_relieving TEXT, t_timing TEXT, s_severity INTEGER DEFAULT 0,
+    bp_systolic   INTEGER, bp_diastolic INTEGER, pulse_rate INTEGER, resp_rate INTEGER,
+    weight_kg     REAL, height_cm REAL, bmi REAL,
     clinician_note TEXT,
     is_demo       INTEGER DEFAULT 0,
     FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -527,9 +557,24 @@ CREATE INDEX IF NOT EXISTS ix_pat_user ON patients(user_id, name);
 """
 
 
+EXAM_VITAL_COLUMNS = {
+    "bp_systolic": "INTEGER", "bp_diastolic": "INTEGER", "pulse_rate": "INTEGER",
+    "resp_rate": "INTEGER", "weight_kg": "REAL", "height_cm": "REAL", "bmi": "REAL",
+}
+
+
+def _ensure_exam_vital_columns(conn: sqlite3.Connection) -> None:
+    """Menambahkan kolom tanda vital pada basis data lama (dibuat sebelum v6.1)."""
+    existing = {row["name"] for row in conn.execute("PRAGMA table_info(exams)")}
+    for col, sqltype in EXAM_VITAL_COLUMNS.items():
+        if col not in existing:
+            conn.execute(f"ALTER TABLE exams ADD COLUMN {col} {sqltype}")
+
+
 def init_db() -> None:
     conn = get_conn()
     conn.executescript(SCHEMA)
+    _ensure_exam_vital_columns(conn)
     conn.commit()
     conn.close()
 
@@ -759,8 +804,9 @@ def save_exam(user_id: str, exam: dict, detections: list[dict]) -> str:
         """INSERT INTO exams(id,user_id,patient_id,created_at,exam_date,model_version,conf_thr,iou_thr,
                              file_name,image_path,annot_path,n_detections,max_conf,urgency,synthesis,
                              o_onset,l_location,d_duration,c_character,a_aggravating,r_relieving,t_timing,
-                             s_severity,clinician_note,is_demo)
-           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                             s_severity,bp_systolic,bp_diastolic,pulse_rate,resp_rate,weight_kg,height_cm,bmi,
+                             clinician_note,is_demo)
+           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (
             exam_id, user_id, exam.get("patient_id"), datetime.now().isoformat(timespec="seconds"),
             exam.get("exam_date", datetime.now().strftime("%Y-%m-%d")), exam.get("model_version"),
@@ -769,6 +815,8 @@ def save_exam(user_id: str, exam: dict, detections: list[dict]) -> str:
             exam.get("synthesis"), exam.get("o_onset", "-"), exam.get("l_location", "-"),
             exam.get("d_duration", "-"), exam.get("c_character", "-"), exam.get("a_aggravating", "-"),
             exam.get("r_relieving", "-"), exam.get("t_timing", "-"), int(exam.get("s_severity", 0) or 0),
+            exam.get("bp_systolic"), exam.get("bp_diastolic"), exam.get("pulse_rate"), exam.get("resp_rate"),
+            exam.get("weight_kg"), exam.get("height_cm"), exam.get("bmi"),
             exam.get("clinician_note", ""), int(exam.get("is_demo", 0)),
         ),
     )
@@ -1125,6 +1173,33 @@ def urgency_tone(u: Optional[str]) -> str:
     return {"Tinggi": "high", "Sedang–Tinggi": "high", "Sedang": "med", "Rendah": "low"}.get(u, "neutral")
 
 
+def compute_bmi(weight_kg: Optional[float], height_cm: Optional[float]) -> Optional[float]:
+    """Menghitung indeks massa tubuh (IMT) = berat badan (kg) / tinggi badan (m)^2."""
+    try:
+        w, h = float(weight_kg or 0), float(height_cm or 0)
+    except (TypeError, ValueError):
+        return None
+    if w <= 0 or h <= 0:
+        return None
+    return w / ((h / 100) ** 2)
+
+
+def bmi_category(bmi: Optional[float]) -> tuple[str, str]:
+    """Klasifikasi IMT dewasa menurut acuan Asia-Pasifik (rujukan Kemenkes RI).
+    Mengembalikan (label, tone) — tone dipakai untuk pewarnaan lencana (pill)."""
+    if bmi is None:
+        return "—", "neutral"
+    if bmi < 18.5:
+        return "Berat badan kurang", "med"
+    if bmi < 23:
+        return "Berat badan normal", "low"
+    if bmi < 25:
+        return "Berat badan lebih", "med"
+    if bmi < 30:
+        return "Obesitas I", "high"
+    return "Obesitas II", "high"
+
+
 def page_head(title: str, subtitle: str) -> None:
     st.markdown(f"<div class='page-head'><h1>{title}</h1><p>{subtitle}</p></div>", unsafe_allow_html=True)
 
@@ -1152,6 +1227,22 @@ def build_report_html(exam: dict, clinician: str, institution: str) -> str:
             ("Memperberat", "a_aggravating"), ("Meredakan", "r_relieving"), ("Waktu", "t_timing")]
     anam_rows = "".join(f"<tr><th>{lab}</th><td>{exam.get(k) or '—'}</td></tr>" for lab, k in olds)
     anam_rows += f"<tr><th>Skala nyeri</th><td>{exam.get('s_severity', 0)}/10</td></tr>"
+
+    has_vitals = any(exam.get(k) for k in
+                     ("bp_systolic", "bp_diastolic", "pulse_rate", "resp_rate", "weight_kg", "height_cm", "bmi"))
+    vital_section = ""
+    if has_vitals:
+        cat, _ = bmi_category(exam.get("bmi"))
+        bmi_txt = f"{exam['bmi']:.1f} kg/m² ({cat})" if exam.get("bmi") else "—"
+        vital_rows = (
+            f"<tr><th>Tekanan darah</th><td>{exam.get('bp_systolic') or '—'}/{exam.get('bp_diastolic') or '—'} mmHg</td></tr>"
+            f"<tr><th>Nadi</th><td>{exam.get('pulse_rate') or '—'} x/menit</td></tr>"
+            f"<tr><th>Frekuensi napas</th><td>{exam.get('resp_rate') or '—'} x/menit</td></tr>"
+            f"<tr><th>Berat badan</th><td>{exam.get('weight_kg') or '—'} kg</td></tr>"
+            f"<tr><th>Tinggi badan</th><td>{exam.get('height_cm') or '—'} cm</td></tr>"
+            f"<tr><th>Indeks massa tubuh (IMT)</th><td>{bmi_txt}</td></tr>"
+        )
+        vital_section = f"<h2>Tanda-tanda vital</h2>\n<table>{vital_rows}</table>"
 
     demo_note = ("<p class='warn'>Pemeriksaan ini dijalankan dalam mode demo. Kotak deteksi merupakan simulasi, "
                  "bukan keluaran model AI.</p>") if exam.get("is_demo") else ""
@@ -1190,6 +1281,7 @@ def build_report_html(exam: dict, clinician: str, institution: str) -> str:
   <tr><th>Jenis kelamin</th><td>{exam.get('sex') or '—'}</td></tr>
   <tr><th>Pemeriksa</th><td>{clinician}{(' · ' + institution) if institution else ''}</td></tr>
 </table>
+{vital_section}
 <h2>Citra dan temuan</h2>
 {img_block}
 <table style="margin-top:14px">
@@ -1249,6 +1341,7 @@ DEFAULTS = {
     "theme": "terang",
     "page": "Ringkasan",
     "anamnesis": {},
+    "vitals": {},
     "active_patient": None,
     "last_batch": [],
     "open_exam": None,
@@ -1571,6 +1664,70 @@ def page_screening(user: dict, model, weights: Optional[Path]) -> None:
     with c_date:
         exam_date = st.date_input("Tanggal pemeriksaan", value=datetime.now())
 
+    with st.expander("Tanda-tanda vital", expanded=not st.session_state.vitals):
+        with st.form("form_vitals"):
+            curv = st.session_state.vitals
+            v1, v2, v3 = st.columns(3, gap="large")
+            with v1:
+                st.markdown("**Tekanan darah**")
+                sistol = st.number_input("Sistolik (mmHg)", min_value=0, max_value=300,
+                                         value=int(curv.get("bp_systolic") or 0), step=1)
+                diastol = st.number_input("Diastolik (mmHg)", min_value=0, max_value=200,
+                                          value=int(curv.get("bp_diastolic") or 0), step=1)
+            with v2:
+                st.markdown("**Pernapasan**")
+                nadi = st.number_input("Nadi (denyut/menit)", min_value=0, max_value=250,
+                                       value=int(curv.get("pulse_rate") or 0), step=1)
+                napas = st.number_input("Frekuensi napas (napas/menit)", min_value=0, max_value=80,
+                                        value=int(curv.get("resp_rate") or 0), step=1)
+            with v3:
+                st.markdown("**Antropometri**")
+                berat = st.number_input("Berat badan (kg)", min_value=0.0, max_value=400.0,
+                                        value=float(curv.get("weight_kg") or 0.0), step=0.1, format="%.1f")
+                tinggi = st.number_input("Tinggi badan (cm)", min_value=0.0, max_value=250.0,
+                                         value=float(curv.get("height_cm") or 0.0), step=0.5, format="%.1f")
+            vb1, vb2 = st.columns([1, 1])
+            with vb1:
+                vsaved = st.form_submit_button("Simpan tanda vital", type="primary", use_container_width=True)
+            with vb2:
+                vcleared = st.form_submit_button("Kosongkan", use_container_width=True, key="vitals_clear")
+            if vsaved:
+                bmi_val = compute_bmi(berat, tinggi)
+                cat, _ = bmi_category(bmi_val)
+                st.session_state.vitals = {
+                    "bp_systolic": int(sistol) or None, "bp_diastolic": int(diastol) or None,
+                    "pulse_rate": int(nadi) or None, "resp_rate": int(napas) or None,
+                    "weight_kg": float(berat) or None, "height_cm": float(tinggi) or None,
+                    "bmi": bmi_val, "bmi_category": cat,
+                }
+                st.success("Tanda-tanda vital tersimpan dan akan disertakan pada rekam pemeriksaan.")
+            if vcleared:
+                st.session_state.vitals = {}
+                st.rerun()
+
+    if st.session_state.vitals:
+        v = st.session_state.vitals
+        bmi_txt = f"{v['bmi']:.1f}" if v.get("bmi") else "—"
+        cat, tone = bmi_category(v.get("bmi"))
+        unit = "<span style='font-size:.7rem;font-weight:500;color:var(--muted)'>{}</span>"
+        st.markdown(
+            "<div class='vital-grid'>"
+            f"<div class='vital-cell'><p class='vlabel'>Tekanan darah</p>"
+            f"<p class='vvalue'>{v.get('bp_systolic') or '—'}/{v.get('bp_diastolic') or '—'} {unit.format('mmHg')}</p></div>"
+            f"<div class='vital-cell'><p class='vlabel'>Nadi</p>"
+            f"<p class='vvalue'>{v.get('pulse_rate') or '—'} {unit.format('x/menit')}</p></div>"
+            f"<div class='vital-cell'><p class='vlabel'>Respirasi</p>"
+            f"<p class='vvalue'>{v.get('resp_rate') or '—'} {unit.format('x/menit')}</p></div>"
+            f"<div class='vital-cell'><p class='vlabel'>Berat badan</p>"
+            f"<p class='vvalue'>{v.get('weight_kg') or '—'} {unit.format('kg')}</p></div>"
+            f"<div class='vital-cell'><p class='vlabel'>Tinggi badan</p>"
+            f"<p class='vvalue'>{v.get('height_cm') or '—'} {unit.format('cm')}</p></div>"
+            f"<div class='vital-cell'><p class='vlabel'>IMT (BMI)</p>"
+            f"<p class='vvalue'>{bmi_txt} {pill(cat, tone)}</p></div>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+
     with st.expander("Anamnesis OLD CARTS", expanded=not st.session_state.anamnesis):
         with st.form("form_anamnesis"):
             a1, a2 = st.columns(2, gap="large")
@@ -1658,6 +1815,7 @@ def page_screening(user: dict, model, weights: Optional[Path]) -> None:
 
     if run:
         anam = st.session_state.anamnesis
+        vit = st.session_state.vitals
         results_view = []
         bar = st.progress(0.0, text="Menyiapkan…")
         for i, (img, fname) in enumerate(zip(processed, names), start=1):
@@ -1689,6 +1847,7 @@ def page_screening(user: dict, model, weights: Optional[Path]) -> None:
                 "clinician_note": note.strip(),
                 "is_demo": 1 if demo else 0,
                 **anam,
+                **{k: v for k, v in vit.items() if k != "bmi_category"},
             }
             save_exam(user["id"], exam, dets)
             results_view.append({"exam": exam, "dets": dets, "annotated": annotated})
@@ -2003,6 +2162,31 @@ def render_exam_detail(user: dict, exam_id: str) -> None:
 
         if exam.get("is_demo"):
             st.warning("Pemeriksaan ini dibuat dalam mode demo — deteksinya simulasi.")
+
+        has_vitals = any(exam.get(k) for k in
+                         ("bp_systolic", "bp_diastolic", "pulse_rate", "resp_rate", "weight_kg", "height_cm", "bmi"))
+        if has_vitals:
+            st.markdown("**Tanda-tanda vital**")
+            cat, tone = bmi_category(exam.get("bmi"))
+            bmi_txt = f"{exam['bmi']:.1f}" if exam.get("bmi") else "—"
+            unit = "<span style='font-size:.7rem;font-weight:500;color:var(--muted)'>{}</span>"
+            st.markdown(
+                "<div class='vital-grid'>"
+                f"<div class='vital-cell'><p class='vlabel'>Tekanan darah</p>"
+                f"<p class='vvalue'>{exam.get('bp_systolic') or '—'}/{exam.get('bp_diastolic') or '—'} {unit.format('mmHg')}</p></div>"
+                f"<div class='vital-cell'><p class='vlabel'>Nadi</p>"
+                f"<p class='vvalue'>{exam.get('pulse_rate') or '—'} {unit.format('x/menit')}</p></div>"
+                f"<div class='vital-cell'><p class='vlabel'>Respirasi</p>"
+                f"<p class='vvalue'>{exam.get('resp_rate') or '—'} {unit.format('x/menit')}</p></div>"
+                f"<div class='vital-cell'><p class='vlabel'>Berat badan</p>"
+                f"<p class='vvalue'>{exam.get('weight_kg') or '—'} {unit.format('kg')}</p></div>"
+                f"<div class='vital-cell'><p class='vlabel'>Tinggi badan</p>"
+                f"<p class='vvalue'>{exam.get('height_cm') or '—'} {unit.format('cm')}</p></div>"
+                f"<div class='vital-cell'><p class='vlabel'>IMT (BMI)</p>"
+                f"<p class='vvalue'>{bmi_txt} {pill(cat, tone)}</p></div>"
+                "</div>",
+                unsafe_allow_html=True,
+            )
 
         i1, i2 = st.columns(2, gap="large")
         with i1:
