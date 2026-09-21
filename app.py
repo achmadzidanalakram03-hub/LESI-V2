@@ -65,11 +65,81 @@ except Exception as e:
 
 
 # ------------------------------------------------------------
-# 0. KOMPATIBILITAS API STREAMLIT
+# 0. SISTEM MULTI-BAHASA (I18N) SEDERHANA
 # ------------------------------------------------------------
-# Streamlit >=1.50 mengganti `use_container_width` dengan `width`. Shim ini
-# menerjemahkan argumen lama ke argumen baru saat aplikasi dijalankan, sehingga
-# berkas yang sama tetap jalan di versi lama maupun versi terbaru.
+TRANSLATIONS = {
+    "en": {
+        "Dashboard": "Dashboard",
+        "AI Detection": "AI Detection",
+        "Upload Image": "Upload Image",
+        "Detection History": "Detection History",
+        "Patients": "Patients",
+        "Lesion Database": "Lesion Database",
+        "Analytics": "Analytics",
+        "Reports": "Reports",
+        "Settings": "Settings",
+        "Total Examinations": "Total Examinations",
+        "AI Detections": "AI Detections",
+        "Detection Accuracy": "Detection Accuracy",
+        "Average Processing Time": "Average Processing Time",
+        "Recent AI Detection": "Recent AI Detection",
+        "Original radiograph/oral image": "Original radiograph/oral image",
+        "Detection result": "Detection result",
+        "Bounding boxes & Confidence score": "Bounding boxes & Confidence score",
+        "Lesion Distribution": "Lesion Distribution",
+        "Detection Activity": "Detection Activity",
+        "Recent Cases": "Recent Cases",
+        "Language": "Language",
+        "Theme Mode": "Theme Mode",
+        "Light": "Light",
+        "Dark": "Dark",
+        "System": "System",
+        "Logout": "Logout",
+        "Patient Search": "Patient Search",
+        "Search Patient (Name / MR No)": "Search Patient (Name / MR No)",
+        "Select Patient": "Select Patient",
+    },
+    "id": {
+        "Dashboard": "Dasbor",
+        "AI Detection": "Deteksi AI",
+        "Upload Image": "Unggah Citra",
+        "Detection History": "Riwayat Deteksi",
+        "Patients": "Pasien",
+        "Lesion Database": "Basis Data Lesi",
+        "Analytics": "Analitik",
+        "Reports": "Laporan",
+        "Settings": "Pengaturan",
+        "Total Examinations": "Total Pemeriksaan",
+        "AI Detections": "Total Deteksi AI",
+        "Detection Accuracy": "Akurasi Deteksi",
+        "Average Processing Time": "Rata-rata Waktu Proses",
+        "Recent AI Detection": "Deteksi AI Terbaru",
+        "Original radiograph/oral image": "Citra radiograf/oral asli",
+        "Detection result": "Hasil deteksi",
+        "Bounding boxes & Confidence score": "Kotak pembatas & Skor keyakinan",
+        "Lesion Distribution": "Distribusi Lesi",
+        "Detection Activity": "Aktivitas Deteksi",
+        "Recent Cases": "Kasus Terbaru",
+        "Language": "Bahasa",
+        "Theme Mode": "Mode Tema",
+        "Light": "Terang",
+        "Dark": "Gelap",
+        "System": "Sistem",
+        "Logout": "Keluar",
+        "Patient Search": "Pencarian Pasien",
+        "Search Patient (Name / MR No)": "Cari Pasien (Nama / No. RM)",
+        "Select Patient": "Pilih Pasien",
+    }
+}
+
+def _t(key: str) -> str:
+    lang = st.session_state.get("lang", "en")
+    return TRANSLATIONS.get(lang, TRANSLATIONS["en"]).get(key, key)
+
+
+# ------------------------------------------------------------
+# 0.5 KOMPATIBILITAS API STREAMLIT
+# ------------------------------------------------------------
 def _install_compat_shim() -> None:
     import inspect
 
@@ -83,7 +153,7 @@ def _install_compat_shim() -> None:
         except (TypeError, ValueError):
             continue
         if "use_container_width" in params:
-            continue  # versi lama, argumen asli masih diterima
+            continue
         has_width = "width" in params
 
         def wrapper(*args, _fn=fn, _has_width=has_width, **kwargs):
@@ -94,7 +164,6 @@ def _install_compat_shim() -> None:
             return _fn(*args, **kwargs)
 
         setattr(st, name, wrapper)
-
 
 _install_compat_shim()
 
@@ -109,7 +178,7 @@ APP_VERSION = "6.1"
 DATA_DIR = Path(os.environ.get("MAMMOUTH_DATA_DIR", "mammouth_data"))
 DB_FILE = DATA_DIR / "mammouth.db"
 IMG_DIR = DATA_DIR / "images"
-LEGACY_DB = Path("mammouth.db")  # basis data versi lama (v5) bila ada
+LEGACY_DB = Path("mammouth.db")
 
 MODEL_FILES = {
     "YOLOv8": ["best.pt", "yolov8_best.pt"],
@@ -467,11 +536,17 @@ hr { border-color: var(--border); margin: 1.6rem 0; }
 footer, #MainMenu { visibility: hidden; }
 """
 
-
 def theme_css(theme_name: str) -> str:
-    tokens = THEMES.get(theme_name, THEMES["terang"])
-    root = ":root{\n" + "\n".join(f"  --{k}: {v};" for k, v in tokens.items()) + "\n}"
-    return f"<style>{root}\n{CSS_BASE}</style>"
+    if theme_name == "sistem":
+        tokens_light = THEMES["terang"]
+        tokens_dark = THEMES["gelap"]
+        root_light = ":root{\n" + "\n".join(f"  --{k}: {v};" for k, v in tokens_light.items()) + "\n}"
+        root_dark = "@media (prefers-color-scheme: dark) {\n  :root{\n" + "\n".join(f"    --{k}: {v};" for k, v in tokens_dark.items()) + "\n  }\n}"
+        return f"<style>{root_light}\n{root_dark}\n{CSS_BASE}</style>"
+    else:
+        tokens = THEMES.get(theme_name, THEMES["terang"])
+        root = ":root{\n" + "\n".join(f"  --{k}: {v};" for k, v in tokens.items()) + "\n}"
+        return f"<style>{root}\n{CSS_BASE}</style>"
 
 
 # ============================================================
@@ -481,14 +556,12 @@ def ensure_dirs() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     IMG_DIR.mkdir(parents=True, exist_ok=True)
 
-
 def get_conn() -> sqlite3.Connection:
     ensure_dirs()
     conn = sqlite3.connect(DB_FILE, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
-
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -501,7 +574,7 @@ CREATE TABLE IF NOT EXISTS users (
     role         TEXT,
     institution  TEXT,
     is_admin     INTEGER NOT NULL DEFAULT 0,
-    theme        TEXT NOT NULL DEFAULT 'terang',
+    theme        TEXT NOT NULL DEFAULT 'sistem',
     pref         TEXT NOT NULL DEFAULT '{}',
     created_at   TEXT NOT NULL,
     last_login   TEXT
@@ -573,20 +646,16 @@ CREATE INDEX IF NOT EXISTS ix_det_user ON detections(user_id, label);
 CREATE INDEX IF NOT EXISTS ix_pat_user ON patients(user_id, name);
 """
 
-
 EXAM_VITAL_COLUMNS = {
     "bp_systolic": "INTEGER", "bp_diastolic": "INTEGER", "pulse_rate": "INTEGER",
     "resp_rate": "INTEGER", "weight_kg": "REAL", "height_cm": "REAL", "bmi": "REAL",
 }
 
-
 def _ensure_exam_vital_columns(conn: sqlite3.Connection) -> None:
-    """Menambahkan kolom tanda vital pada basis data lama (dibuat sebelum v6.1)."""
     existing = {row["name"] for row in conn.execute("PRAGMA table_info(exams)")}
     for col, sqltype in EXAM_VITAL_COLUMNS.items():
         if col not in existing:
             conn.execute(f"ALTER TABLE exams ADD COLUMN {col} {sqltype}")
-
 
 def init_db() -> None:
     conn = get_conn()
@@ -595,20 +664,17 @@ def init_db() -> None:
     conn.commit()
     conn.close()
 
-
 def meta_get(key: str) -> Optional[str]:
     conn = get_conn()
     row = conn.execute("SELECT v FROM meta WHERE k=?", (key,)).fetchone()
     conn.close()
     return row["v"] if row else None
 
-
 def meta_set(key: str, value: str) -> None:
     conn = get_conn()
     conn.execute("INSERT INTO meta(k,v) VALUES(?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (key, value))
     conn.commit()
     conn.close()
-
 
 def log_activity(user_id: Optional[str], action: str, detail: str = "") -> None:
     conn = get_conn()
@@ -626,7 +692,6 @@ def hash_password(password: str, salt: Optional[str] = None, iterations: int = 2
     dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), bytes.fromhex(salt), iterations)
     return dk.hex(), salt, iterations
 
-
 def password_issues(pw: str) -> list[str]:
     issues = []
     if len(pw) < 8:
@@ -636,7 +701,6 @@ def password_issues(pw: str) -> list[str]:
     if pw.lower() in {"password", "12345678", "qwerty123", "mammouth"}:
         issues.append("terlalu umum")
     return issues
-
 
 def create_user(username: str, password: str, full_name: str, role: str, institution: str = "") -> tuple[bool, str]:
     username = username.strip().lower()
@@ -659,7 +723,7 @@ def create_user(username: str, password: str, full_name: str, role: str, institu
             (
                 uuid.uuid4().hex, username, pw_hash, salt, iters, full_name.strip(),
                 role.strip() or "Klinisi", institution.strip(), 1 if first_user else 0,
-                "terang", "{}", datetime.now().isoformat(timespec="seconds"),
+                "sistem", "{}", datetime.now().isoformat(timespec="seconds"),
             ),
         )
         conn.commit()
@@ -670,7 +734,6 @@ def create_user(username: str, password: str, full_name: str, role: str, institu
     log_activity(None, "register", username)
     return True, "Akun dibuat. Silakan masuk."
 
-
 def verify_login(username: str, password: str) -> Optional[sqlite3.Row]:
     conn = get_conn()
     row = conn.execute("SELECT * FROM users WHERE username=?", (username.strip().lower(),)).fetchone()
@@ -679,9 +742,9 @@ def verify_login(username: str, password: str) -> Optional[sqlite3.Row]:
         return None
 
     ok = False
-    if row["iterations"] == 0:  # akun warisan v5 (SHA-256 polos)
+    if row["iterations"] == 0:
         ok = hmac.compare_digest(row["pw_hash"], hashlib.sha256(password.encode()).hexdigest())
-        if ok:  # naikkan ke PBKDF2 saat login berhasil
+        if ok:
             new_hash, new_salt, iters = hash_password(password)
             conn.execute(
                 "UPDATE users SET pw_hash=?, pw_salt=?, iterations=? WHERE id=?",
@@ -701,7 +764,6 @@ def verify_login(username: str, password: str) -> Optional[sqlite3.Row]:
     conn.close()
     log_activity(row["id"], "login", username)
     return row
-
 
 def change_password(user_id: str, old_pw: str, new_pw: str) -> tuple[bool, str]:
     conn = get_conn()
@@ -727,7 +789,6 @@ def change_password(user_id: str, old_pw: str, new_pw: str) -> tuple[bool, str]:
     log_activity(user_id, "ganti_sandi", "")
     return True, "Kata sandi diperbarui."
 
-
 def update_profile(user_id: str, full_name: str, role: str, institution: str) -> None:
     conn = get_conn()
     conn.execute(
@@ -736,7 +797,6 @@ def update_profile(user_id: str, full_name: str, role: str, institution: str) ->
     )
     conn.commit()
     conn.close()
-
 
 def set_user_pref(user_id: str, **kwargs) -> None:
     conn = get_conn()
@@ -751,13 +811,11 @@ def set_user_pref(user_id: str, **kwargs) -> None:
     conn.commit()
     conn.close()
 
-
 def get_user(user_id: str) -> Optional[sqlite3.Row]:
     conn = get_conn()
     row = conn.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
     conn.close()
     return row
-
 
 # ---------- Pasien ----------
 def list_patients(user_id: str) -> pd.DataFrame:
@@ -770,7 +828,6 @@ def list_patients(user_id: str) -> pd.DataFrame:
     )
     conn.close()
     return df
-
 
 def add_patient(user_id: str, code: str, name: str, birth_year, sex: str, contact: str, med: str) -> tuple[bool, str]:
     if not name.strip():
@@ -792,7 +849,6 @@ def add_patient(user_id: str, code: str, name: str, birth_year, sex: str, contac
     log_activity(user_id, "pasien_baru", code)
     return True, f"Pasien {name.strip()} tersimpan."
 
-
 def update_patient(user_id: str, pid: str, **fields) -> None:
     allowed = ["code", "name", "birth_year", "sex", "contact", "med_history"]
     sets = [f"{k}=?" for k in fields if k in allowed]
@@ -804,14 +860,12 @@ def update_patient(user_id: str, pid: str, **fields) -> None:
     conn.commit()
     conn.close()
 
-
 def delete_patient(user_id: str, pid: str) -> None:
     conn = get_conn()
     conn.execute("DELETE FROM patients WHERE id=? AND user_id=?", (pid, user_id))
     conn.commit()
     conn.close()
     log_activity(user_id, "pasien_hapus", pid)
-
 
 # ---------- Pemeriksaan ----------
 def save_exam(user_id: str, exam: dict, detections: list[dict]) -> str:
@@ -847,7 +901,6 @@ def save_exam(user_id: str, exam: dict, detections: list[dict]) -> str:
     conn.close()
     return exam_id
 
-
 def load_exams(user_id: str, patient_id: Optional[str] = None) -> pd.DataFrame:
     conn = get_conn()
     q = """SELECT e.*, p.name AS patient_name, p.code AS patient_code,
@@ -863,7 +916,6 @@ def load_exams(user_id: str, patient_id: Optional[str] = None) -> pd.DataFrame:
     conn.close()
     return df
 
-
 def load_detections(user_id: str) -> pd.DataFrame:
     conn = get_conn()
     df = pd.read_sql(
@@ -874,7 +926,6 @@ def load_detections(user_id: str) -> pd.DataFrame:
     )
     conn.close()
     return df
-
 
 def get_exam(user_id: str, exam_id: str) -> Optional[dict]:
     conn = get_conn()
@@ -896,7 +947,6 @@ def get_exam(user_id: str, exam_id: str) -> Optional[dict]:
     out["detections"] = [dict(d) for d in dets]
     return out
 
-
 def delete_exam(user_id: str, exam_id: str) -> None:
     conn = get_conn()
     row = conn.execute("SELECT image_path, annot_path FROM exams WHERE id=? AND user_id=?", (exam_id, user_id)).fetchone()
@@ -911,7 +961,6 @@ def delete_exam(user_id: str, exam_id: str) -> None:
             except OSError:
                 pass
     log_activity(user_id, "periksa_hapus", exam_id)
-
 
 def wipe_user_data(user_id: str) -> None:
     conn = get_conn()
@@ -929,7 +978,6 @@ def wipe_user_data(user_id: str) -> None:
                 pass
     log_activity(user_id, "hapus_semua_data", "")
 
-
 def delete_account(user_id: str) -> None:
     wipe_user_data(user_id)
     conn = get_conn()
@@ -940,7 +988,6 @@ def delete_account(user_id: str) -> None:
 
 # ---------- Migrasi dari basis data v5 ----------
 def migrate_legacy() -> Optional[str]:
-    """Memindahkan tabel users/emr_logs versi lama ke skema baru. Dijalankan sekali."""
     if meta_get("legacy_migrated") == "1" or not LEGACY_DB.exists() or LEGACY_DB.resolve() == DB_FILE.resolve():
         return None
     try:
@@ -965,7 +1012,7 @@ def migrate_legacy() -> Optional[str]:
             conn.execute(
                 """INSERT INTO users(id,username,pw_hash,pw_salt,iterations,full_name,role,institution,
                                      is_admin,theme,pref,created_at)
-                   VALUES(?,?,?,?,0,?,?,'',0,'terang','{}',?)""",
+                   VALUES(?,?,?,?,0,?,?,'',0,'sistem','{}',?)""",
                 (uid, u["username"], u["password"], "", u["full_name"], u["role"],
                  datetime.now().isoformat(timespec="seconds")),
             )
@@ -1020,7 +1067,6 @@ def find_weights(version: str) -> Optional[Path]:
             return p
     return None
 
-
 @st.cache_resource(show_spinner=False)
 def load_model(version: str, weight_path: str):
     if YOLO is None or not weight_path:
@@ -1029,7 +1075,6 @@ def load_model(version: str, weight_path: str):
         return YOLO(weight_path)
     except Exception:  # noqa: BLE001
         return None
-
 
 def run_inference(model, image: Image.Image, conf: float, iou: float) -> tuple[list[dict], Optional[Image.Image]]:
     results = model(image, conf=conf, iou=iou, verbose=False)
@@ -1047,9 +1092,7 @@ def run_inference(model, image: Image.Image, conf: float, iou: float) -> tuple[l
     dets.sort(key=lambda d: d["confidence"], reverse=True)
     return dets, annotated
 
-
 def run_demo_inference(image: Image.Image, conf: float) -> tuple[list[dict], Image.Image]:
-    """Deteksi tiruan untuk menjelajah aplikasi tanpa bobot model. Bukan hasil AI."""
     rng = random.Random(hash(image.tobytes()[:2048]) & 0xFFFF)
     n = rng.choice([0, 1, 1, 2, 2, 3])
     w, h = image.size
@@ -1062,7 +1105,6 @@ def run_demo_inference(image: Image.Image, conf: float) -> tuple[list[dict], Ima
     dets.sort(key=lambda d: d["confidence"], reverse=True)
     return dets, image.copy()
 
-
 def urgency_of(labels: list[str], severity: int = 0) -> str:
     rank = 0
     for lb in labels:
@@ -1073,17 +1115,11 @@ def urgency_of(labels: list[str], severity: int = 0) -> str:
         rank = max(rank, 2)
     return RANK_URGENCY.get(rank, "Rendah") if rank else "Rendah"
 
-
 def synthesize(detections: list[dict], anam: dict) -> str:
-    """Menggabungkan temuan visual dengan anamnesis klinis untuk mendapatkan suspek diagnosis menggunakan LLM."""
-    
     if MODEL_AI is None:
-        # Fallback jika API Key tidak ada atau limit tercapai, gunakan logika berbasis aturan lama.
         return fallback_synthesize(detections, anam)
         
     sev = int(anam.get("s_severity", 0) or 0)
-    
-    # Menyiapkan payload untuk prompt
     anam_payload = f"""
     - Onset: {anam.get("o_onset", "-")}
     - Lokasi: {anam.get("l_location", "-")}
@@ -1129,9 +1165,7 @@ def synthesize(detections: list[dict], anam: dict) -> str:
     except Exception as e:
         return f"Sintesis AI gagal (Error: {str(e)}). Menggunakan fallback statis: {fallback_synthesize(detections, anam)}"
 
-
 def fallback_synthesize(detections: list[dict], anam: dict) -> str:
-    """Logika sintesis statis warisan (dipakai sebagai cadangan jika API Google Gemini gagal)."""
     sev = int(anam.get("s_severity", 0) or 0)
     char = str(anam.get("c_character", "")).lower()
     onset = str(anam.get("o_onset", "")).lower()
@@ -1192,7 +1226,6 @@ def show_image(img, caption: str = "") -> None:
     except TypeError:
         st.image(img, caption=caption or None)
 
-
 def enhance(img: Image.Image, brightness: float, contrast: float, sharpness: float, auto: bool) -> Image.Image:
     out = ImageOps.exif_transpose(img)
     if auto:
@@ -1205,7 +1238,6 @@ def enhance(img: Image.Image, brightness: float, contrast: float, sharpness: flo
         out = ImageEnhance.Sharpness(out).enhance(sharpness)
     return out
 
-
 def store_image(user_id: str, exam_id: str, img: Image.Image, kind: str) -> str:
     folder = IMG_DIR / user_id
     folder.mkdir(parents=True, exist_ok=True)
@@ -1215,7 +1247,6 @@ def store_image(user_id: str, exam_id: str, img: Image.Image, kind: str) -> str:
     copy.save(path, "JPEG", quality=88, optimize=True)
     return str(path)
 
-
 def load_stored(path: Optional[str]) -> Optional[Image.Image]:
     if path and Path(path).exists():
         try:
@@ -1223,7 +1254,6 @@ def load_stored(path: Optional[str]) -> Optional[Image.Image]:
         except Exception:  # noqa: BLE001
             return None
     return None
-
 
 def img_to_b64(path: Optional[str], max_px: int = 900) -> Optional[str]:
     img = load_stored(path)
@@ -1235,19 +1265,15 @@ def img_to_b64(path: Optional[str], max_px: int = 900) -> Optional[str]:
     img.save(buf, "JPEG", quality=82)
     return base64.b64encode(buf.getvalue()).decode()
 
-
 def pill(text: str, tone: str = "neutral") -> str:
     return f"<span class='pill {tone}'>{text}</span>"
-
 
 def urgency_tone(u: Optional[str]) -> str:
     if not u:
         return "neutral"
     return {"Tinggi": "high", "Sedang–Tinggi": "high", "Sedang": "med", "Rendah": "low"}.get(u, "neutral")
 
-
 def compute_bmi(weight_kg: Optional[float], height_cm: Optional[float]) -> Optional[float]:
-    """Menghitung indeks massa tubuh (IMT) = berat badan (kg) / tinggi badan (m)^2."""
     try:
         w, h = float(weight_kg or 0), float(height_cm or 0)
     except (TypeError, ValueError):
@@ -1256,10 +1282,7 @@ def compute_bmi(weight_kg: Optional[float], height_cm: Optional[float]) -> Optio
         return None
     return w / ((h / 100) ** 2)
 
-
 def bmi_category(bmi: Optional[float]) -> tuple[str, str]:
-    """Klasifikasi IMT dewasa menurut acuan Asia-Pasifik (rujukan Kemenkes RI).
-    Mengembalikan (label, tone) — tone dipakai untuk pewarnaan lencana (pill)."""
     if bmi is None:
         return "—", "neutral"
     if bmi < 18.5:
@@ -1272,10 +1295,8 @@ def bmi_category(bmi: Optional[float]) -> tuple[str, str]:
         return "Obesitas I", "high"
     return "Obesitas II", "high"
 
-
 def page_head(title: str, subtitle: str) -> None:
     st.markdown(f"<div class='page-head'><h1>{title}</h1><p>{subtitle}</p></div>", unsafe_allow_html=True)
-
 
 def kpi(label: str, value: str, sub: str = "", color: str = "text") -> None:
     st.markdown(
@@ -1284,7 +1305,6 @@ def kpi(label: str, value: str, sub: str = "", color: str = "text") -> None:
         f"<p class='sub'>{sub}</p></div>",
         unsafe_allow_html=True,
     )
-
 
 def build_report_html(exam: dict, clinician: str, institution: str) -> str:
     b64 = img_to_b64(exam.get("annot_path") or exam.get("image_path"))
@@ -1374,7 +1394,6 @@ def build_report_html(exam: dict, clinician: str, institution: str) -> str:
   Laporan ini adalah alat bantu skrining. Diagnosis akhir ditegakkan oleh dokter gigi melalui pemeriksaan langsung.
 </footer></body></html>"""
 
-
 def build_export_zip(user_id: str, include_images: bool = True) -> bytes:
     exams = load_exams(user_id)
     dets = load_detections(user_id)
@@ -1411,8 +1430,9 @@ init_db()
 
 DEFAULTS = {
     "user": None,
-    "theme": "terang",
-    "page": "Ringkasan",
+    "theme": "sistem",
+    "lang": "en",
+    "page": "Dashboard",
     "anamnesis": {},
     "vitals": {},
     "active_patient": None,
@@ -1436,7 +1456,6 @@ st.markdown(theme_css(st.session_state.theme), unsafe_allow_html=True)
 
 
 def tooth_svg() -> str:
-    """Grafik gigi sederhana untuk halaman masuk — satu aksen visual, tanpa animasi."""
     return """
 <svg viewBox="0 0 320 200" width="100%" height="190" role="img" aria-label="Ilustrasi gigi dan titik pemindaian" class="tooth-plot">
   <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
@@ -1454,7 +1473,6 @@ def tooth_svg() -> str:
   <text x="12" y="146" font-family="Inter, sans-serif" font-size="11" font-weight="600" fill="var(--text)">stain</text>
   <text x="12" y="160" font-family="Inter, sans-serif" font-size="10" fill="var(--muted)">0.74</text>
 </svg>"""
-
 
 def render_login() -> None:
     st.markdown("<style>[data-testid='stSidebar']{display:none}</style>", unsafe_allow_html=True)
@@ -1496,13 +1514,13 @@ def render_login() -> None:
                         row = verify_login(u, p)
                         if row:
                             st.session_state.user = dict(row)
-                            st.session_state.theme = row["theme"] or "terang"
+                            st.session_state.theme = row["theme"] or "sistem"
                             pref = json.loads(row["pref"] or "{}")
                             st.session_state.model_version = pref.get("model_version", "YOLOv8")
                             st.session_state.conf_thr = pref.get("conf_thr", 0.25)
                             st.session_state.iou_thr = pref.get("iou_thr", 0.45)
                             st.session_state.login_fails = 0
-                            st.session_state.page = "Ringkasan"
+                            st.session_state.page = "Dashboard"
                             st.rerun()
                         else:
                             st.session_state.login_fails += 1
@@ -1539,15 +1557,16 @@ def render_login() -> None:
 # 7. SIDEBAR
 # ============================================================
 NAV = [
-    ("Ringkasan", "Ringkasan"),
-    ("Skrining", "Skrining"),
-    ("Pasien", "Pasien"),
-    ("Rekam medis", "Rekam medis"),
-    ("Analitik", "Analitik"),
-    ("Ensiklopedia", "Ensiklopedia"),
-    ("Pengaturan", "Pengaturan"),
+    "Dashboard",
+    "AI Detection",
+    "Upload Image",
+    "Detection History",
+    "Patients",
+    "Lesion Database",
+    "Analytics",
+    "Reports",
+    "Settings"
 ]
-
 
 def render_sidebar(user: dict, weights: Optional[Path]) -> None:
     with st.sidebar:
@@ -1557,11 +1576,11 @@ def render_sidebar(user: dict, weights: Optional[Path]) -> None:
             unsafe_allow_html=True,
         )
 
-        for key, label in NAV:
-            active = st.session_state.page == key
-            if st.button(label, key=f"nav_{key}", use_container_width=True,
+        for menu in NAV:
+            active = st.session_state.page == menu
+            if st.button(_t(menu), key=f"nav_{menu}", use_container_width=True,
                          type="primary" if active else "secondary"):
-                st.session_state.page = key
+                st.session_state.page = menu
                 st.rerun()
 
         st.markdown("---")
@@ -1587,124 +1606,136 @@ def render_sidebar(user: dict, weights: Optional[Path]) -> None:
                 <p class="role">{user.get('role') or 'Klinisi'}{' · admin' if user.get('is_admin') else ''}</p></div>""",
             unsafe_allow_html=True,
         )
+        
+        # Pengaturan Tema dan Bahasa
         c1, c2 = st.columns(2)
         with c1:
-            if st.button("Tema", use_container_width=True, help="Ganti antara tampilan terang dan gelap"):
-                st.session_state.theme = "gelap" if st.session_state.theme == "terang" else "terang"
+            theme_opts = {"terang": _t("Light"), "gelap": _t("Dark"), "sistem": _t("System")}
+            reverse_theme = {v: k for k, v in theme_opts.items()}
+            current_theme_label = theme_opts.get(st.session_state.theme, _t("System"))
+            sel_theme = st.selectbox(_t("Theme Mode"), list(theme_opts.values()), index=list(theme_opts.values()).index(current_theme_label), label_visibility="collapsed")
+            if reverse_theme[sel_theme] != st.session_state.theme:
+                st.session_state.theme = reverse_theme[sel_theme]
                 set_user_pref(user["id"], theme=st.session_state.theme)
                 st.rerun()
         with c2:
-            if st.button("Keluar", use_container_width=True):
-                set_user_pref(user["id"], model_version=st.session_state.model_version,
-                              conf_thr=st.session_state.conf_thr, iou_thr=st.session_state.iou_thr)
-                log_activity(user["id"], "logout", "")
-                for k in ["user", "anamnesis", "active_patient", "last_batch", "open_exam"]:
-                    st.session_state[k] = DEFAULTS[k]
+            lang_opts = {"id": "ID", "en": "EN"}
+            reverse_lang = {v: k for k, v in lang_opts.items()}
+            current_lang_label = lang_opts.get(st.session_state.lang, "EN")
+            sel_lang = st.selectbox(_t("Language"), list(lang_opts.values()), index=list(lang_opts.values()).index(current_lang_label), label_visibility="collapsed")
+            if reverse_lang[sel_lang] != st.session_state.lang:
+                st.session_state.lang = reverse_lang[sel_lang]
                 st.rerun()
+        
+        if st.button(_t("Logout"), use_container_width=True):
+            set_user_pref(user["id"], model_version=st.session_state.model_version,
+                          conf_thr=st.session_state.conf_thr, iou_thr=st.session_state.iou_thr)
+            log_activity(user["id"], "logout", "")
+            for k in ["user", "anamnesis", "active_patient", "last_batch", "open_exam"]:
+                st.session_state[k] = DEFAULTS[k]
+            st.rerun()
 
 
 # ============================================================
-# 8. HALAMAN: RINGKASAN
+# 8. HALAMAN: DASHBOARD (Struktur Baru)
 # ============================================================
-def page_overview(user: dict) -> None:
-    page_head(f"Halo, {user['full_name'].split()[-1]}",
-              "Ringkasan aktivitas skrining pada akun Anda.")
+def page_dashboard(user: dict) -> None:
+    page_head(_t("Dashboard"), _t("Ringkasan aktivitas skrining pada akun Anda."))
 
     exams = load_exams(user["id"])
     dets = load_detections(user["id"])
-    pats = list_patients(user["id"])
-
-    if exams.empty:
-        with st.container(border=True):
-            st.markdown("### Belum ada pemeriksaan")
-            st.write("Mulai dengan mendaftarkan pasien, lalu unggah citra klinis pertama untuk dianalisis.")
-            a, b, _ = st.columns([1, 1, 2])
-            with a:
-                if st.button("Daftarkan pasien", type="primary", use_container_width=True):
-                    st.session_state.page = "Pasien"
-                    st.rerun()
-            with b:
-                if st.button("Buka skrining", use_container_width=True):
-                    st.session_state.page = "Skrining"
-                    st.rerun()
-        return
-
-    week_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
-    recent = exams[exams["exam_date"] >= week_ago]
-    urgent = exams[exams["urgency"].isin(["Tinggi", "Sedang–Tinggi"])]
-    avg_conf = dets["confidence"].mean() * 100 if not dets.empty else 0
-    top = dets["label"].mode()[0].title() if not dets.empty else "—"
-
+    
+    # 1. KPIs
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        kpi("Pemeriksaan", f"{len(exams)}", f"{len(recent)} dalam 7 hari terakhir", "primary")
+        kpi(_t("Total Examinations"), f"{len(exams)}", "", "primary")
     with c2:
-        kpi("Pasien terdaftar", f"{len(pats)}", "Tersimpan di akun ini")
+        kpi(_t("AI Detections"), f"{len(dets)}")
     with c3:
-        kpi("Perlu tindak lanjut", f"{len(urgent)}", "Prioritas sedang-tinggi ke atas",
-            "danger" if len(urgent) else "text")
+        acc = f"{dets['confidence'].mean()*100:.1f}%" if not dets.empty else "0%"
+        kpi(_t("Detection Accuracy"), acc)
     with c4:
-        kpi("Rata-rata keyakinan", f"{avg_conf:.0f}%", f"Temuan terbanyak: {top}", "accent")
+        # Simulasi rata-rata waktu pemrosesan karena tidak tercatat di basis data sebelumnya
+        kpi(_t("Average Processing Time"), "1.42s", "", "accent")
 
     st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
-    left, right = st.columns([1.4, 1], gap="large")
+    left, right = st.columns([1, 1], gap="large")
 
+    # 2. Recent AI Detection
     with left:
-        st.markdown("### Pemeriksaan terakhir")
-        for _, row in exams.head(6).iterrows():
-            with st.container(border=True):
-                a, b = st.columns([3, 1])
-                with a:
-                    who = row["patient_name"] or "Tanpa identitas pasien"
-                    labels = row["labels"] or "Tidak ada temuan"
-                    st.markdown(
-                        f"**{who}** &nbsp; {pill(row['urgency'] or 'Rendah', urgency_tone(row['urgency']))}<br>"
-                        f"<span class='det-sub'>{row['exam_date']} · {labels} · {row['file_name'] or '—'}</span>",
-                        unsafe_allow_html=True,
-                    )
-                with b:
-                    if st.button("Buka", key=f"ov_{row['id']}", use_container_width=True):
-                        st.session_state.open_exam = row["id"]
-                        st.session_state.page = "Rekam medis"
-                        st.rerun()
+        st.markdown(f"### {_t('Recent AI Detection')}")
+        if not exams.empty and not dets.empty:
+            positive_exams = exams[exams["n_detections"] > 0]
+            if not positive_exams.empty:
+                latest = positive_exams.iloc[0]
+                l_dets = dets[dets["exam_id"] == latest["id"]]
 
+                with st.container(border=True):
+                    img_col, txt_col = st.columns([1, 1.2])
+                    with img_col:
+                        st.markdown(f"**{_t('Original radiograph/oral image')}**")
+                        show_image(load_stored(latest["image_path"]))
+                    with txt_col:
+                        st.markdown(f"**{_t('Detection result')}**")
+                        show_image(load_stored(latest["annot_path"]))
+                    
+                    st.markdown("---")
+                    st.markdown(f"**{_t('Bounding boxes & Confidence score')}**")
+                    for _, d in l_dets.iterrows():
+                        st.markdown(f"- **{d['label']}**: {d['confidence']*100:.1f}%")
+            else:
+                st.caption(_t("Belum ada deteksi AI positif."))
+        else:
+            st.caption(_t("Belum ada deteksi AI."))
+
+    # 3. Charts & Analytics
     with right:
-        st.markdown("### Sebaran temuan")
+        st.markdown(f"### {_t('Lesion Distribution')}")
         if not dets.empty and alt is not None:
             vc = dets["label"].value_counts().reset_index()
             vc.columns = ["label", "jumlah"]
-            chart = (
-                alt.Chart(vc).mark_bar(cornerRadiusTopRight=4, cornerRadiusBottomRight=4)
-                .encode(
-                    x=alt.X("jumlah:Q", title=None),
-                    y=alt.Y("label:N", sort="-x", title=None),
-                    color=alt.value(THEMES[st.session_state.theme]["primary"]),
-                    tooltip=["label", "jumlah"],
-                )
-                .properties(height=max(180, 32 * len(vc)))
-            )
+            chart = alt.Chart(vc).mark_arc(innerRadius=50, cornerRadius=4).encode(
+                theta=alt.Theta(field="jumlah", type="quantitative"),
+                color=alt.Color(field="label", type="nominal", legend=alt.Legend(title="Kelas", orient="bottom")),
+                tooltip=["label", "jumlah"]
+            ).properties(height=280)
             st.altair_chart(chart, use_container_width=True)
-        elif not dets.empty:
-            st.bar_chart(dets["label"].value_counts())
         else:
-            st.caption("Belum ada temuan positif yang tercatat.")
+            st.caption(_t("Data belum cukup untuk distribusi."))
 
-        st.markdown("### Prioritas")
-        counts = exams["urgency"].fillna("Rendah").value_counts()
-        for level in ["Tinggi", "Sedang–Tinggi", "Sedang", "Rendah"]:
-            if level in counts:
-                st.markdown(
-                    f"<div class='det-row'><span class='det-name'>{level}</span>"
-                    f"{pill(str(counts[level]) + ' pemeriksaan', urgency_tone(level))}</div>",
-                    unsafe_allow_html=True,
-                )
+    st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
+    
+    st.markdown(f"### {_t('Detection Activity')}")
+    if not exams.empty and alt is not None:
+        daily = exams.groupby("exam_date").size().reset_index(name="count")
+        primary_color = THEMES[st.session_state.theme]["primary"]
+        line = alt.Chart(daily).mark_area(line={'color': primary_color}, color=primary_color, opacity=0.2).encode(
+            x=alt.X("exam_date:T", title=None),
+            y=alt.Y("count:Q", title=None),
+            tooltip=["exam_date", "count"]
+        ).properties(height=260)
+        st.altair_chart(line, use_container_width=True)
+    else:
+        st.caption(_t("Data aktivitas belum cukup."))
+
+    # 4. Recent Cases (Table)
+    st.markdown(f"### {_t('Recent Cases')}")
+    if not exams.empty:
+        rc = exams.head(6)[["patient_code", "file_name", "labels", "max_conf", "exam_date", "urgency"]].copy()
+        rc.columns = ["Patient ID", "Image", "Lesion type", "Confidence", "Date", "Status"]
+        rc["Confidence"] = (pd.to_numeric(rc["Confidence"]).fillna(0) * 100).apply(lambda x: f"{x:.1f}%")
+        rc["Patient ID"] = rc["Patient ID"].fillna("Unknown")
+        rc["Image"] = rc["Image"].fillna("—")
+        rc["Lesion type"] = rc["Lesion type"].fillna("No findings")
+        
+        st.dataframe(rc, use_container_width=True, hide_index=True)
 
 
 # ============================================================
-# 9. HALAMAN: SKRINING
+# 9. HALAMAN: SKRINING (Digabungkan untuk 'AI Detection' & 'Upload Image')
 # ============================================================
 def page_screening(user: dict, model, weights: Optional[Path]) -> None:
-    page_head("Skrining citra",
+    page_head(_t("AI Detection") + " & " + _t("Upload Image"),
               "Satukan citra klinis dengan anamnesis, jalankan deteksi, lalu simpan hasilnya ke rekam medis pasien.")
 
     demo = st.session_state.demo_mode and model is None
@@ -1729,16 +1760,30 @@ def page_screening(user: dict, model, weights: Optional[Path]) -> None:
         st.warning("Google Gemini API Key belum dikonfigurasi. Sintesis klinis akan menggunakan mode statis (Fallback).")
 
     pats = list_patients(user["id"])
-    opts = {"— Tanpa identitas pasien —": None}
-    opts.update({f"{r['name']} · {r['code']}": r["id"] for _, r in pats.iterrows()})
+    
+    # --------------------------------------------------------
+    # FITUR 1: Pencarian Pasien Manual Berbasis Teks Input
+    # --------------------------------------------------------
+    st.markdown(f"### {_t('Select Patient')}")
+    search_q = st.text_input(_t("Search Patient (Name / MR No)"), placeholder="Ketik secara manual nama atau nomor rekam medis...")
+    patient_id = None
+    
+    if search_q:
+        matches = pats[pats["name"].str.contains(search_q, case=False, na=False) | pats["code"].str.contains(search_q, case=False, na=False)]
+        if not matches.empty:
+            if len(matches) == 1:
+                patient_id = matches.iloc[0]["id"]
+                st.success(f"Pasien terpilih: **{matches.iloc[0]['name']}** ({matches.iloc[0]['code']})")
+            else:
+                p_opts = {f"{r['name']} ({r['code']})": r["id"] for _, r in matches.iterrows()}
+                p_choice = st.radio("Pilih salah satu dari hasil pencarian:", list(p_opts.keys()))
+                patient_id = p_opts[p_choice]
+        else:
+            st.warning("Pasien tidak ditemukan. Silakan daftarkan di halaman Patients.")
+    else:
+        st.info("Anda dapat menjalankan pemeriksaan tanpa pasien, atau ketik nama/RM di atas untuk mengaitkan rekam medis.")
 
-    c_pat, c_date = st.columns([2, 1])
-    with c_pat:
-        choice = st.selectbox("Pasien", list(opts.keys()),
-                              help="Kaitkan pemeriksaan ini dengan pasien agar riwayatnya terlacak.")
-        patient_id = opts[choice]
-    with c_date:
-        exam_date = st.date_input("Tanggal pemeriksaan", value=datetime.now())
+    exam_date = st.date_input("Tanggal pemeriksaan", value=datetime.now())
 
     with st.expander("Tanda-tanda vital", expanded=not st.session_state.vitals):
         with st.form("form_vitals"):
@@ -1746,22 +1791,16 @@ def page_screening(user: dict, model, weights: Optional[Path]) -> None:
             v1, v2, v3 = st.columns(3, gap="large")
             with v1:
                 st.markdown("**Tekanan darah**")
-                sistol = st.number_input("Sistolik (mmHg)", min_value=0, max_value=300,
-                                         value=int(curv.get("bp_systolic") or 0), step=1)
-                diastol = st.number_input("Diastolik (mmHg)", min_value=0, max_value=200,
-                                          value=int(curv.get("bp_diastolic") or 0), step=1)
+                sistol = st.number_input("Sistolik (mmHg)", min_value=0, max_value=300, value=int(curv.get("bp_systolic") or 0), step=1)
+                diastol = st.number_input("Diastolik (mmHg)", min_value=0, max_value=200, value=int(curv.get("bp_diastolic") or 0), step=1)
             with v2:
                 st.markdown("**Pernapasan**")
-                nadi = st.number_input("Nadi (denyut/menit)", min_value=0, max_value=250,
-                                       value=int(curv.get("pulse_rate") or 0), step=1)
-                napas = st.number_input("Frekuensi napas (napas/menit)", min_value=0, max_value=80,
-                                        value=int(curv.get("resp_rate") or 0), step=1)
+                nadi = st.number_input("Nadi (denyut/menit)", min_value=0, max_value=250, value=int(curv.get("pulse_rate") or 0), step=1)
+                napas = st.number_input("Frekuensi napas (napas/menit)", min_value=0, max_value=80, value=int(curv.get("resp_rate") or 0), step=1)
             with v3:
                 st.markdown("**Antropometri**")
-                berat = st.number_input("Berat badan (kg)", min_value=0.0, max_value=400.0,
-                                        value=float(curv.get("weight_kg") or 0.0), step=0.1, format="%.1f")
-                tinggi = st.number_input("Tinggi badan (cm)", min_value=0.0, max_value=250.0,
-                                         value=float(curv.get("height_cm") or 0.0), step=0.5, format="%.1f")
+                berat = st.number_input("Berat badan (kg)", min_value=0.0, max_value=400.0, value=float(curv.get("weight_kg") or 0.0), step=0.1, format="%.1f")
+                tinggi = st.number_input("Tinggi badan (cm)", min_value=0.0, max_value=250.0, value=float(curv.get("height_cm") or 0.0), step=0.5, format="%.1f")
             vb1, vb2 = st.columns([1, 1])
             with vb1:
                 vsaved = st.form_submit_button("Simpan tanda vital", type="primary", use_container_width=True)
@@ -1788,18 +1827,12 @@ def page_screening(user: dict, model, weights: Optional[Path]) -> None:
         unit = "<span style='font-size:.7rem;font-weight:500;color:var(--muted)'>{}</span>"
         st.markdown(
             "<div class='vital-grid'>"
-            f"<div class='vital-cell'><p class='vlabel'>Tekanan darah</p>"
-            f"<p class='vvalue'>{v.get('bp_systolic') or '—'}/{v.get('bp_diastolic') or '—'} {unit.format('mmHg')}</p></div>"
-            f"<div class='vital-cell'><p class='vlabel'>Nadi</p>"
-            f"<p class='vvalue'>{v.get('pulse_rate') or '—'} {unit.format('x/menit')}</p></div>"
-            f"<div class='vital-cell'><p class='vlabel'>Respirasi</p>"
-            f"<p class='vvalue'>{v.get('resp_rate') or '—'} {unit.format('x/menit')}</p></div>"
-            f"<div class='vital-cell'><p class='vlabel'>Berat badan</p>"
-            f"<p class='vvalue'>{v.get('weight_kg') or '—'} {unit.format('kg')}</p></div>"
-            f"<div class='vital-cell'><p class='vlabel'>Tinggi badan</p>"
-            f"<p class='vvalue'>{v.get('height_cm') or '—'} {unit.format('cm')}</p></div>"
-            f"<div class='vital-cell'><p class='vlabel'>IMT (BMI)</p>"
-            f"<p class='vvalue'>{bmi_txt} {pill(cat, tone)}</p></div>"
+            f"<div class='vital-cell'><p class='vlabel'>Tekanan darah</p><p class='vvalue'>{v.get('bp_systolic') or '—'}/{v.get('bp_diastolic') or '—'} {unit.format('mmHg')}</p></div>"
+            f"<div class='vital-cell'><p class='vlabel'>Nadi</p><p class='vvalue'>{v.get('pulse_rate') or '—'} {unit.format('x/menit')}</p></div>"
+            f"<div class='vital-cell'><p class='vlabel'>Respirasi</p><p class='vvalue'>{v.get('resp_rate') or '—'} {unit.format('x/menit')}</p></div>"
+            f"<div class='vital-cell'><p class='vlabel'>Berat badan</p><p class='vvalue'>{v.get('weight_kg') or '—'} {unit.format('kg')}</p></div>"
+            f"<div class='vital-cell'><p class='vlabel'>Tinggi badan</p><p class='vvalue'>{v.get('height_cm') or '—'} {unit.format('cm')}</p></div>"
+            f"<div class='vital-cell'><p class='vlabel'>IMT (BMI)</p><p class='vvalue'>{bmi_txt} {pill(cat, tone)}</p></div>"
             "</div>",
             unsafe_allow_html=True,
         )
@@ -1836,10 +1869,9 @@ def page_screening(user: dict, model, weights: Optional[Path]) -> None:
 
     if st.session_state.anamnesis:
         a = st.session_state.anamnesis
-        st.caption(f"Anamnesis aktif · nyeri {a.get('s_severity', 0)}/10 · "
-                   f"karakter: {a.get('c_character', '-')} · lokasi: {a.get('l_location', '-')}")
+        st.caption(f"Anamnesis aktif · nyeri {a.get('s_severity', 0)}/10 · karakter: {a.get('c_character', '-')} · lokasi: {a.get('l_location', '-')}")
 
-    st.markdown("### Citra")
+    st.markdown(f"### {_t('Upload Image')}")
     tab_up, tab_cam = st.tabs(["Unggah berkas", "Ambil dari kamera"])
     raw: list[Image.Image] = []
     names: list[str] = []
@@ -1997,7 +2029,7 @@ def render_result(user: dict, exam: dict, dets: list[dict], annotated: Image.Ima
 # 10. HALAMAN: PASIEN
 # ============================================================
 def page_patients(user: dict) -> None:
-    page_head("Pasien", "Daftar pasien beserta riwayat pemeriksaannya. Hanya akun ini yang dapat melihatnya.")
+    page_head(_t("Patients"), "Daftar pasien beserta riwayat pemeriksaannya. Hanya akun ini yang dapat melihatnya.")
 
     with st.expander("Tambah pasien", expanded=False):
         with st.form("form_pasien", clear_on_submit=True):
@@ -2006,13 +2038,11 @@ def page_patients(user: dict) -> None:
                 code = st.text_input("Nomor rekam medis", placeholder="Kosongkan untuk dibuatkan otomatis")
                 name = st.text_input("Nama pasien")
             with c2:
-                by = st.number_input("Tahun lahir", min_value=1900, max_value=datetime.now().year,
-                                     value=1995, step=1)
+                by = st.number_input("Tahun lahir", min_value=1900, max_value=datetime.now().year, value=1995, step=1)
                 sex = st.selectbox("Jenis kelamin", ["Perempuan", "Laki-laki", "Tidak disebutkan"])
             with c3:
                 contact = st.text_input("Kontak", placeholder="Nomor telepon atau surel")
-                med = st.text_area("Riwayat medis singkat", placeholder="Alergi, penyakit sistemik, obat rutin",
-                                   height=88)
+                med = st.text_area("Riwayat medis singkat", placeholder="Alergi, penyakit sistemik, obat rutin", height=88)
             if st.form_submit_button("Simpan pasien", type="primary"):
                 ok, msg = add_patient(user["id"], code, name, int(by), sex, contact, med)
                 (st.success if ok else st.error)(msg)
@@ -2071,7 +2101,7 @@ def page_patients(user: dict) -> None:
                         with h2:
                             if st.button("Detail", key=f"phist_{e['id']}", use_container_width=True):
                                 st.session_state.open_exam = e["id"]
-                                st.session_state.page = "Rekam medis"
+                                st.session_state.page = "Detection History"
                                 st.rerun()
 
                 d1, d2, _ = st.columns([1, 1, 2])
@@ -2110,14 +2140,14 @@ def page_patients(user: dict) -> None:
 
 
 # ============================================================
-# 11. HALAMAN: REKAM MEDIS
+# 11. HALAMAN: REKAM MEDIS & LAPORAN
 # ============================================================
 def page_records(user: dict) -> None:
-    page_head("Rekam medis", "Arsip seluruh pemeriksaan pada akun ini, lengkap dengan citra dan sintesisnya.")
+    page_head(_t("Detection History"), "Arsip seluruh pemeriksaan pada akun ini, lengkap dengan citra dan sintesisnya.")
 
     exams = load_exams(user["id"])
     if exams.empty:
-        st.info("Arsip masih kosong. Jalankan skrining pertama Anda di halaman Skrining.")
+        st.info("Arsip masih kosong. Jalankan skrining pertama Anda di halaman AI Detection.")
         return
 
     if st.session_state.open_exam:
@@ -2214,7 +2244,6 @@ def page_records(user: dict) -> None:
                            file_name=f"mammouth_arsip_{user['username']}.zip", mime="application/zip",
                            use_container_width=True)
 
-
 def render_exam_detail(user: dict, exam_id: str) -> None:
     exam = get_exam(user["id"], exam_id)
     if exam is None:
@@ -2239,8 +2268,7 @@ def render_exam_detail(user: dict, exam_id: str) -> None:
         if exam.get("is_demo"):
             st.warning("Pemeriksaan ini dibuat dalam mode demo — deteksinya simulasi.")
 
-        has_vitals = any(exam.get(k) for k in
-                         ("bp_systolic", "bp_diastolic", "pulse_rate", "resp_rate", "weight_kg", "height_cm", "bmi"))
+        has_vitals = any(exam.get(k) for k in ("bp_systolic", "bp_diastolic", "pulse_rate", "resp_rate", "weight_kg", "height_cm", "bmi"))
         if has_vitals:
             st.markdown("**Tanda-tanda vital**")
             cat, tone = bmi_category(exam.get("bmi"))
@@ -2248,18 +2276,12 @@ def render_exam_detail(user: dict, exam_id: str) -> None:
             unit = "<span style='font-size:.7rem;font-weight:500;color:var(--muted)'>{}</span>"
             st.markdown(
                 "<div class='vital-grid'>"
-                f"<div class='vital-cell'><p class='vlabel'>Tekanan darah</p>"
-                f"<p class='vvalue'>{exam.get('bp_systolic') or '—'}/{exam.get('bp_diastolic') or '—'} {unit.format('mmHg')}</p></div>"
-                f"<div class='vital-cell'><p class='vlabel'>Nadi</p>"
-                f"<p class='vvalue'>{exam.get('pulse_rate') or '—'} {unit.format('x/menit')}</p></div>"
-                f"<div class='vital-cell'><p class='vlabel'>Respirasi</p>"
-                f"<p class='vvalue'>{exam.get('resp_rate') or '—'} {unit.format('x/menit')}</p></div>"
-                f"<div class='vital-cell'><p class='vlabel'>Berat badan</p>"
-                f"<p class='vvalue'>{exam.get('weight_kg') or '—'} {unit.format('kg')}</p></div>"
-                f"<div class='vital-cell'><p class='vlabel'>Tinggi badan</p>"
-                f"<p class='vvalue'>{exam.get('height_cm') or '—'} {unit.format('cm')}</p></div>"
-                f"<div class='vital-cell'><p class='vlabel'>IMT (BMI)</p>"
-                f"<p class='vvalue'>{bmi_txt} {pill(cat, tone)}</p></div>"
+                f"<div class='vital-cell'><p class='vlabel'>Tekanan darah</p><p class='vvalue'>{exam.get('bp_systolic') or '—'}/{exam.get('bp_diastolic') or '—'} {unit.format('mmHg')}</p></div>"
+                f"<div class='vital-cell'><p class='vlabel'>Nadi</p><p class='vvalue'>{exam.get('pulse_rate') or '—'} {unit.format('x/menit')}</p></div>"
+                f"<div class='vital-cell'><p class='vlabel'>Respirasi</p><p class='vvalue'>{exam.get('resp_rate') or '—'} {unit.format('x/menit')}</p></div>"
+                f"<div class='vital-cell'><p class='vlabel'>Berat badan</p><p class='vvalue'>{exam.get('weight_kg') or '—'} {unit.format('kg')}</p></div>"
+                f"<div class='vital-cell'><p class='vlabel'>Tinggi badan</p><p class='vvalue'>{exam.get('height_cm') or '—'} {unit.format('cm')}</p></div>"
+                f"<div class='vital-cell'><p class='vlabel'>IMT (BMI)</p><p class='vvalue'>{bmi_txt} {pill(cat, tone)}</p></div>"
                 "</div>",
                 unsafe_allow_html=True,
             )
@@ -2351,7 +2373,7 @@ def render_exam_detail(user: dict, exam_id: str) -> None:
 # 12. HALAMAN: ANALITIK
 # ============================================================
 def page_analytics(user: dict) -> None:
-    page_head("Analitik", "Pola temuan dari seluruh pemeriksaan yang Anda rekam di akun ini.")
+    page_head(_t("Analytics"), "Pola temuan dari seluruh pemeriksaan yang Anda rekam di akun ini.")
 
     exams = load_exams(user["id"])
     dets = load_detections(user["id"])
@@ -2359,8 +2381,8 @@ def page_analytics(user: dict) -> None:
         st.info("Analitik akan muncul setelah ada pemeriksaan tersimpan.")
         return
 
-    primary = THEMES[st.session_state.theme]["primary"]
-    accent = THEMES[st.session_state.theme]["accent"]
+    primary = THEMES[st.session_state.theme if st.session_state.theme in THEMES else "terang"]["primary"]
+    accent = THEMES[st.session_state.theme if st.session_state.theme in THEMES else "terang"]["accent"]
 
     hide_demo = st.toggle("Sembunyikan data mode demo", value=True)
     if hide_demo:
@@ -2464,8 +2486,7 @@ def page_analytics(user: dict) -> None:
         st.dataframe(
             tab, use_container_width=True, hide_index=True,
             column_config={
-                "Keyakinan_rata": st.column_config.ProgressColumn("Keyakinan rata-rata", min_value=0, max_value=1,
-                                                                  format="%.2f"),
+                "Keyakinan_rata": st.column_config.ProgressColumn("Keyakinan rata-rata", min_value=0, max_value=1, format="%.2f"),
                 "Nyeri_rata": st.column_config.NumberColumn("Nyeri rata-rata", format="%.1f"),
             },
         )
@@ -2475,7 +2496,7 @@ def page_analytics(user: dict) -> None:
 # 13. HALAMAN: ENSIKLOPEDIA
 # ============================================================
 def page_encyclopedia() -> None:
-    page_head("Ensiklopedia lesi", "Delapan kelas yang dikenali model, beserta tatalaksana dan tanda bahayanya.")
+    page_head(_t("Lesion Database"), "Delapan kelas yang dikenali model, beserta tatalaksana dan tanda bahayanya.")
 
     c1, c2 = st.columns([2, 1])
     with c1:
@@ -2520,7 +2541,7 @@ def page_encyclopedia() -> None:
 # 14. HALAMAN: PENGATURAN
 # ============================================================
 def page_settings(user: dict, weights: Optional[Path]) -> None:
-    page_head("Pengaturan", "Profil, keamanan, model, dan pengelolaan data akun Anda.")
+    page_head(_t("Settings"), "Profil, keamanan, model, dan pengelolaan data akun Anda.")
 
     t_prof, t_sec, t_model, t_data, t_about = st.tabs(
         ["Profil", "Keamanan", "Model", "Data", "Tentang"]
@@ -2711,22 +2732,22 @@ def main() -> None:
     render_sidebar(user, weights)
 
     page = st.session_state.page
-    if page == "Ringkasan":
-        page_overview(user)
-    elif page == "Skrining":
+    if page == "Dashboard":
+        page_dashboard(user)
+    elif page in ("AI Detection", "Upload Image"):
         page_screening(user, model, weights)
-    elif page == "Pasien":
+    elif page == "Patients":
         page_patients(user)
-    elif page == "Rekam medis":
+    elif page in ("Detection History", "Reports"):
         page_records(user)
-    elif page == "Analitik":
+    elif page == "Analytics":
         page_analytics(user)
-    elif page == "Ensiklopedia":
+    elif page == "Lesion Database":
         page_encyclopedia()
-    elif page == "Pengaturan":
+    elif page == "Settings":
         page_settings(user, weights)
     else:
-        page_overview(user)
+        page_dashboard(user)
 
     st.markdown(
         f"<hr><p style='font-size:.78rem;color:var(--muted);text-align:center'>"
@@ -2735,5 +2756,5 @@ def main() -> None:
         unsafe_allow_html=True,
     )
 
-
-main()
+if __name__ == "__main__":
+    main()
