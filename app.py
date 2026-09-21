@@ -3,13 +3,13 @@ MAMMOUTH — My Assistant in Mouth Health
 =======================================
 Platform skrining kesehatan rongga mulut berbasis computer vision.
 
-v6.1 — Proyek independen.
+v6.1 — Proyek independen (AI Terintegrasi).
 Fitur utama:
   • Akun mandiri (registrasi terbuka) dengan isolasi data penuh per pengguna
   • Penyimpanan permanen: SQLite relasional + arsip citra per akun di disk
   • Rekam medis pasien (bukan sekadar log gambar): pasien → pemeriksaan → deteksi
   • Anamnesis OLD CARTS + tanda-tanda vital (TD, nadi, napas, BB/TB, IMT otomatis)
-  • Anamnesis dan tanda vital terintegrasi dengan sintesis klinis berbasis aturan
+  • Sintesis Klinis Berbasis LLM (Google Gemini) untuk suspek diagnosis
   • Analitik, laporan cetak, ekspor penuh (ZIP), dan mode demo tanpa bobot model
 
 Jalankan:  streamlit run app.py
@@ -45,6 +45,17 @@ try:
     from ultralytics import YOLO
 except Exception:  # pragma: no cover
     YOLO = None
+
+try:
+    import google.generativeai as genai
+    # Konfigurasi Gemini menggunakan rahasia dari Streamlit Cloud
+    if "GEMINI_API_KEY" in st.secrets:
+        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+        MODEL_AI = genai.GenerativeModel('gemini-1.5-flash')
+    else:
+        MODEL_AI = None
+except Exception:
+    MODEL_AI = None
 
 
 # ------------------------------------------------------------
@@ -994,7 +1005,7 @@ def migrate_legacy() -> Optional[str]:
 
 
 # ============================================================
-# 4. MESIN AI & SINTESIS KLINIS
+# 4. MESIN AI & SINTESIS KLINIS (Diperbarui dengan Gemini API)
 # ============================================================
 def find_weights(version: str) -> Optional[Path]:
     for cand in MODEL_FILES.get(version, ["best.pt"]):
@@ -1058,7 +1069,63 @@ def urgency_of(labels: list[str], severity: int = 0) -> str:
 
 
 def synthesize(detections: list[dict], anam: dict) -> str:
-    """Menggabungkan temuan visual dengan anamnesis OLD CARTS menjadi kalimat kerja klinis."""
+    """Menggabungkan temuan visual dengan anamnesis klinis untuk mendapatkan suspek diagnosis menggunakan LLM."""
+    
+    if MODEL_AI is None:
+        # Fallback jika API Key tidak ada atau limit tercapai, gunakan logika berbasis aturan lama.
+        return fallback_synthesize(detections, anam)
+        
+    sev = int(anam.get("s_severity", 0) or 0)
+    
+    # Menyiapkan payload untuk prompt
+    anam_payload = f"""
+    - Onset: {anam.get("o_onset", "-")}
+    - Lokasi: {anam.get("l_location", "-")}
+    - Durasi: {anam.get("d_duration", "-")}
+    - Karakteristik: {anam.get("c_character", "-")}
+    - Memperberat: {anam.get("a_aggravating", "-")}
+    - Meredakan: {anam.get("r_relieving", "-")}
+    - Skala Nyeri (VAS): {sev}/10
+    """
+    
+    if not detections:
+        distribusi = "Tidak ada lesi yang terdeteksi secara visual pada citra ini."
+    else:
+        distribusi_list = []
+        for i, d in enumerate(detections):
+            distribusi_list.append(
+                f"Lesi {i+1}: Jenis '{d['label']}' (Keyakinan: {d['confidence']*100:.1f}%) pada rentang koordinat piksel x:[{d['x1']:.1f}-{d['x2']:.1f}], y:[{d['y1']:.1f}-{d['y2']:.1f}]"
+            )
+        distribusi = "\n".join(distribusi_list)
+        
+    prompt = f"""
+    Anda adalah asisten AI klinis untuk sistem skrining kedokteran gigi (MAMMOUTH).
+    Berikan sintesis klinis dan suspek diagnosis berdasarkan korelasi dua set data berikut.
+    
+    DATA ANAMNESIS (OLD CARTS):
+    {anam_payload}
+    
+    HASIL DETEKSI VISUAL (Distribusi Gambar dari YOLO):
+    {distribusi}
+    
+    INSTRUKSI KETAT:
+    1. Berikan 1-2 kemungkinan suspek diagnosis.
+    2. Jelaskan alasannya dengan mengkorelasikan gejala dari anamnesis dengan lokasi dan jenis distribusi lesi pada gambar.
+    3. JANGAN PERNAH menyertakan atau membahas prevalensi statistik penyakit. Fokus HANYA pada data klinis dan distribusi gambar pasien ini.
+    4. Tulis dalam 1-2 paragraf singkat dan profesional berbahasa Indonesia.
+    """
+    
+    try:
+        response = MODEL_AI.generate_content(prompt)
+        if response and response.text:
+            return response.text.replace('\n', '<br>')
+        return fallback_synthesize(detections, anam)
+    except Exception as e:
+        return f"Sintesis AI gagal (Error: {str(e)}). Menggunakan fallback statis: {fallback_synthesize(detections, anam)}"
+
+
+def fallback_synthesize(detections: list[dict], anam: dict) -> str:
+    """Logika sintesis statis warisan (dipakai sebagai cadangan jika API Google Gemini gagal)."""
     sev = int(anam.get("s_severity", 0) or 0)
     char = str(anam.get("c_character", "")).lower()
     onset = str(anam.get("o_onset", "")).lower()
@@ -1290,7 +1357,7 @@ def build_report_html(exam: dict, clinician: str, institution: str) -> str:
 </table>
 <h2>Anamnesis OLD CARTS</h2>
 <table>{anam_rows}</table>
-<h2>Sintesis klinis</h2>
+<h2>Sintesis klinis (Berbasis AI)</h2>
 <div class="synth">{exam.get('synthesis') or '—'}</div>
 {f"<h2>Catatan pemeriksa</h2><p>{exam.get('clinician_note')}</p>" if exam.get('clinician_note') else ""}
 <div class="sign">Tingkat prioritas: <strong>{exam.get('urgency') or '—'}</strong><br><br><br>
@@ -1652,6 +1719,9 @@ def page_screening(user: dict, model, weights: Optional[Path]) -> None:
     if demo:
         st.warning("Mode demo aktif. Kotak deteksi disimulasikan dan ditandai di rekam medis — jangan dipakai klinis.")
 
+    if MODEL_AI is None:
+        st.warning("Google Gemini API Key belum dikonfigurasi. Sintesis klinis akan menggunakan mode statis (Fallback).")
+
     pats = list_patients(user["id"])
     opts = {"— Tanpa identitas pasien —": None}
     opts.update({f"{r['name']} · {r['code']}": r["id"] for _, r in pats.iterrows()})
@@ -1753,7 +1823,7 @@ def page_screening(user: dict, model, weights: Optional[Path]) -> None:
                     "c_character": ch or "-", "a_aggravating": ag or "-", "r_relieving": rl or "-",
                     "t_timing": tm or "-", "s_severity": sv,
                 }
-                st.success("Anamnesis tersimpan dan akan dipakai untuk sintesis temuan.")
+                st.success("Anamnesis tersimpan dan akan dipakai untuk sintesis temuan (via AI/Rules).")
             if cleared:
                 st.session_state.anamnesis = {}
                 st.rerun()
@@ -1810,7 +1880,7 @@ def page_screening(user: dict, model, weights: Optional[Path]) -> None:
 
     note = st.text_area("Catatan pemeriksa (opsional)", placeholder="Temuan klinis langsung, rencana, atau rujukan.")
 
-    run = st.button(f"Jalankan deteksi pada {len(processed)} citra",
+    run = st.button(f"Jalankan deteksi & AI pada {len(processed)} citra",
                     type="primary", use_container_width=True)
 
     if run:
@@ -1819,7 +1889,7 @@ def page_screening(user: dict, model, weights: Optional[Path]) -> None:
         results_view = []
         bar = st.progress(0.0, text="Menyiapkan…")
         for i, (img, fname) in enumerate(zip(processed, names), start=1):
-            bar.progress((i - 1) / len(processed), text=f"Menganalisis {fname}")
+            bar.progress((i - 1) / len(processed), text=f"Menganalisis {fname} & Sintesis AI")
             try:
                 if demo:
                     dets, annotated = run_demo_inference(img, st.session_state.conf_thr)
@@ -1894,7 +1964,7 @@ def render_result(user: dict, exam: dict, dets: list[dict], annotated: Image.Ima
         tone = urgency_tone(exam["urgency"])
         cls = {"high": "u-tinggi", "med": "u-sedang", "low": "u-rendah"}.get(tone, "")
         st.markdown(
-            f"<div class='verdict {cls}'><p class='title'>Sintesis klinis</p>"
+            f"<div class='verdict {cls}'><p class='title'>Sintesis Klinis (Berbasis AI)</p>"
             f"<p class='body'>{exam['synthesis']}</p></div>",
             unsafe_allow_html=True,
         )
@@ -2496,6 +2566,7 @@ def page_settings(user: dict, weights: Optional[Path]) -> None:
             st.markdown("### Status runtime")
             rows = [
                 ("Paket ultralytics", "terpasang" if YOLO else "belum terpasang"),
+                ("Google Gemini API", "terhubung" if MODEL_AI else "belum terhubung"),
                 ("Arsitektur aktif", st.session_state.model_version),
                 ("Berkas bobot", weights.name if weights else "tidak ditemukan"),
                 ("Ambang keyakinan", f"{st.session_state.conf_thr:.2f}"),
@@ -2605,6 +2676,7 @@ def page_settings(user: dict, weights: Optional[Path]) -> None:
             st.markdown(
                 "- Antarmuka: Streamlit\n"
                 "- Deteksi objek: Ultralytics YOLO (v8/v11/v12)\n"
+                "- Sintesis Klinis: Google Gemini AI\n"
                 "- Penyimpanan: SQLite relasional dan arsip citra per akun\n"
                 "- Keamanan kata sandi: PBKDF2-HMAC-SHA256, 200.000 iterasi, salt per akun"
             )
