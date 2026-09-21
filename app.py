@@ -48,13 +48,19 @@ except Exception:  # pragma: no cover
 
 try:
     import google.generativeai as genai
-    # Konfigurasi Gemini menggunakan rahasia dari Streamlit Cloud
-    if "GEMINI_API_KEY" in st.secrets:
-        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+    # Mendeteksi API Key baik dengan atau tanpa st.secrets eksplisit
+    api_key = None
+    if hasattr(st, "secrets") and "GEMINI_API_KEY" in st.secrets:
+        api_key = st.secrets["GEMINI_API_KEY"]
+    elif "GEMINI_API_KEY" in os.environ:
+        api_key = os.environ["GEMINI_API_KEY"]
+
+    if api_key:
+        genai.configure(api_key=api_key)
         MODEL_AI = genai.GenerativeModel('gemini-1.5-flash')
     else:
         MODEL_AI = None
-except Exception:
+except Exception as e:
     MODEL_AI = None
 
 
