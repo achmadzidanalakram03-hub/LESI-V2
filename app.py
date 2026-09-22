@@ -46,22 +46,57 @@ try:
 except Exception:  # pragma: no cover
     YOLO = None
 
+# Google GenAI SDK (SDK resmi baru: google-genai).
+# Jangan hard-code API key; MAMMOUTH membacanya dari Streamlit Secrets
+# atau environment variable GEMINI_API_KEY.
 try:
-    import google.generativeai as genai
-    # Mendeteksi API Key baik dengan atau tanpa st.secrets eksplisit
-    api_key = None
-    if hasattr(st, "secrets") and "GEMINI_API_KEY" in st.secrets:
-        api_key = st.secrets["GEMINI_API_KEY"]
-    elif "GEMINI_API_KEY" in os.environ:
-        api_key = os.environ["GEMINI_API_KEY"]
+    from google import genai
+    from google.genai import types as genai_types
+except Exception:  # pragma: no cover - dependency opsional saat mode demo
+    genai = None
+    genai_types = None
 
-    if api_key:
-        genai.configure(api_key=api_key)
-        MODEL_AI = genai.GenerativeModel('gemini-1.5-flash')
-    else:
-        MODEL_AI = None
-except Exception as e:
-    MODEL_AI = None
+GEMINI_DEFAULT_MODEL = "gemini-3.8-flash"
+GEMINI_SDK_ERROR = None
+GEMINI_LAST_STATUS = "Belum ada request Gemini."
+
+def _read_secret(name: str, default: str = "") -> str:
+    """Baca secret dengan aman dari Streamlit Secrets lalu environment."""
+    try:
+        value = st.secrets.get(name)
+        if value is not None and str(value).strip():
+            return str(value).strip()
+    except Exception:
+        pass
+    return os.environ.get(name, default).strip()
+
+def get_gemini_api_key() -> str:
+    return _read_secret("GEMINI_API_KEY") or _read_secret("GOOGLE_API_KEY")
+
+def get_gemini_model_name() -> str:
+    return _read_secret("GEMINI_MODEL", GEMINI_DEFAULT_MODEL) or GEMINI_DEFAULT_MODEL
+
+def get_gemini_client():
+    """Buat client Gemini dari secret runtime saat ini. Tidak meng-cache API key."""
+    global GEMINI_SDK_ERROR
+    if genai is None:
+        GEMINI_SDK_ERROR = "Package google-genai belum terpasang. Tambahkan `google-genai` ke requirements.txt."
+        return None
+
+    api_key = get_gemini_api_key()
+    if not api_key:
+        GEMINI_SDK_ERROR = "GEMINI_API_KEY/GOOGLE_API_KEY belum ditemukan di Streamlit Secrets atau environment."
+        return None
+
+    try:
+        GEMINI_SDK_ERROR = None
+        return genai.Client(api_key=api_key)
+    except Exception as exc:  # noqa: BLE001
+        GEMINI_SDK_ERROR = f"Gagal membuat client Gemini: {exc}"
+        return None
+
+# Gemini client dibuat on-demand agar perubahan Streamlit Secrets langsung terbaca.
+MODEL_AI = None
 
 
 # ------------------------------------------------------------
@@ -532,7 +567,377 @@ hr { border-color: var(--border); margin: 1.6rem 0; }
 .auth-list li::before { content: ""; position: absolute; left: 0; top: 19px; width: 8px; height: 8px; border-radius: 2px; background: var(--primary); }
 .tooth-plot { margin-top: 30px; }
 
-@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+/* ============================================================
+   MAMMOUTH RESPONSIVE WORKSTATION SYSTEM
+   Desktop -> Tablet -> Mobile
+   ============================================================ */
+
+/* Fluid desktop canvas */
+.main .block-container,
+[data-testid="stAppViewContainer"] .block-container {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* Prevent accidental horizontal overflow */
+html, body, .stApp, [data-testid="stAppViewContainer"] {
+    max-width: 100%;
+    overflow-x: hidden;
+}
+
+/* Image/media safety */
+img, video, canvas {
+    max-width: 100%;
+    height: auto;
+}
+
+/* Keep Streamlit horizontal groups flexible */
+[data-testid="stHorizontalBlock"] {
+    min-width: 0;
+}
+
+[data-testid="stHorizontalBlock"] > div {
+    min-width: 0;
+}
+
+/* Tables remain usable without breaking the page */
+[data-testid="stDataFrame"] {
+    max-width: 100%;
+    overflow-x: auto;
+}
+
+/* Desktop: spacious clinical workstation */
+@media (min-width: 1280px) {
+    .block-container {
+        max-width: 1540px;
+        padding-left: 2.5rem;
+        padding-right: 2.5rem;
+    }
+
+    [data-testid="stSidebar"] {
+        min-width: 250px;
+        max-width: 270px;
+    }
+
+    .page-head {
+        margin-bottom: 1.75rem;
+    }
+}
+
+/* Compact desktop / landscape tablet */
+@media (min-width: 1024px) and (max-width: 1279px) {
+    .block-container {
+        max-width: 1180px;
+        padding-left: 1.75rem;
+        padding-right: 1.75rem;
+    }
+
+    [data-testid="stSidebar"] {
+        min-width: 225px;
+        max-width: 240px;
+    }
+
+    h1 { font-size: 1.9rem !important; }
+    h2 { font-size: 1.35rem !important; }
+
+    .kpi {
+        padding: 16px 18px;
+    }
+
+    .kpi .value {
+        font-size: 1.7rem;
+    }
+}
+
+/* Tablet: native Streamlit sidebar becomes the navigation drawer */
+@media (min-width: 768px) and (max-width: 1023px) {
+    .block-container {
+        max-width: 100%;
+        padding-top: 1.75rem;
+        padding-left: 1.25rem;
+        padding-right: 1.25rem;
+        padding-bottom: 3rem;
+    }
+
+    [data-testid="stSidebar"] {
+        width: 285px !important;
+        min-width: 285px !important;
+    }
+
+    [data-testid="stSidebar"] .block-container {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+
+    /* Let two-column content become stacked when the available width is tight. */
+    [data-testid="stHorizontalBlock"] {
+        flex-wrap: wrap !important;
+        gap: 1rem !important;
+    }
+
+    [data-testid="stHorizontalBlock"] > div {
+        flex: 1 1 min(100%, 320px) !important;
+    }
+
+    .page-head {
+        margin-bottom: 1.25rem;
+    }
+
+    h1 { font-size: 1.85rem !important; }
+    h2 { font-size: 1.3rem !important; }
+
+    .card, .kpi {
+        padding: 16px 18px;
+    }
+
+    .kpi .value {
+        font-size: 1.6rem;
+    }
+
+    .stButton > button,
+    .stDownloadButton > button,
+    .stFormSubmitButton > button {
+        min-height: 44px;
+    }
+}
+
+/* Mobile: focused clinical interface */
+@media (max-width: 767px) {
+    .block-container {
+        width: 100%;
+        max-width: 100%;
+        padding-top: .9rem;
+        padding-left: .85rem;
+        padding-right: .85rem;
+        padding-bottom: 5.5rem;
+    }
+
+    /* Streamlit's native sidebar acts as the mobile drawer. */
+    [data-testid="stSidebar"] {
+        width: 300px !important;
+        max-width: 86vw !important;
+    }
+
+    [data-testid="stSidebar"] .block-container {
+        padding: 1rem .85rem 1.5rem .85rem;
+    }
+
+    .brand .mark {
+        font-size: 1.3rem;
+    }
+
+    .brand-sub {
+        margin-bottom: 14px;
+    }
+
+    /* Navigation buttons become large touch targets. */
+    [data-testid="stSidebar"] .stButton > button {
+        min-height: 44px;
+        text-align: left;
+        padding: .65rem .8rem !important;
+    }
+
+    /* Mobile top-level content */
+    .page-head {
+        margin-bottom: 1rem;
+    }
+
+    .page-head h1,
+    h1 {
+        font-size: 1.55rem !important;
+        line-height: 1.15 !important;
+    }
+
+    h2 {
+        font-size: 1.18rem !important;
+        line-height: 1.25 !important;
+        margin-top: 1.2rem !important;
+    }
+
+    h3 {
+        font-size: 1rem !important;
+        margin-top: 1rem !important;
+    }
+
+    .page-head p {
+        font-size: .86rem;
+        line-height: 1.45;
+    }
+
+    /* Recompose every Streamlit column group vertically. */
+    [data-testid="stHorizontalBlock"] {
+        display: flex !important;
+        flex-direction: column !important;
+        flex-wrap: nowrap !important;
+        width: 100% !important;
+        gap: .8rem !important;
+    }
+
+    [data-testid="stHorizontalBlock"] > div {
+        width: 100% !important;
+        min-width: 100% !important;
+        flex: 1 1 100% !important;
+    }
+
+    /* Compact metric blocks instead of oversized dashboard cards. */
+    .kpi {
+        min-height: 0;
+        padding: 14px 16px;
+        border-radius: 11px;
+    }
+
+    .kpi .label {
+        font-size: .72rem;
+    }
+
+    .kpi .value {
+        font-size: 1.45rem;
+        margin-top: 5px;
+    }
+
+    .kpi .sub {
+        font-size: .72rem;
+        margin-top: 3px;
+    }
+
+    .card {
+        padding: 16px;
+        border-radius: 11px;
+    }
+
+    /* Make Streamlit controls touch-friendly. */
+    .stButton > button,
+    .stDownloadButton > button,
+    .stFormSubmitButton > button {
+        min-height: 46px;
+        width: 100%;
+    }
+
+    input, textarea,
+    [data-baseweb="select"] > div {
+        min-height: 44px !important;
+    }
+
+    /* Tabs can scroll horizontally rather than wrapping into an unusable row. */
+    .stTabs [data-baseweb="tab-list"] {
+        overflow-x: auto;
+        scrollbar-width: none;
+        flex-wrap: nowrap !important;
+    }
+
+    .stTabs [data-baseweb="tab-list"]::-webkit-scrollbar {
+        display: none;
+    }
+
+    .stTabs [data-baseweb="tab"] {
+        flex: 0 0 auto;
+        padding: 9px 13px;
+        font-size: .82rem;
+    }
+
+    /* Expanders work well as mobile information sections. */
+    [data-testid="stExpander"] summary {
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+    }
+
+    /* Detection rows become vertical to prevent confidence meters from overflowing. */
+    .det-row {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 7px;
+        padding: 12px 0;
+    }
+
+    .meter {
+        width: 100%;
+        max-width: 180px;
+    }
+
+    /* Vital cards become a compact two-column grid on phones. */
+    .vital-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+    }
+
+    .vital-cell {
+        padding: 10px 11px;
+    }
+
+    /* Patient cards stack cleanly on phones. */
+    .who {
+        padding: 12px 13px;
+    }
+
+    /* Avoid giant login branding on narrow screens. */
+    .auth-hero .mark {
+        font-size: 2.55rem;
+    }
+
+    /* Tables can scroll horizontally instead of clipping clinical fields. */
+    [data-testid="stDataFrame"] {
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* Streamlit images should never exceed the viewport. */
+    [data-testid="stImageContainer"] img {
+        max-width: 100% !important;
+        height: auto !important;
+    }
+
+    /* Keep alerts readable without forcing horizontal overflow. */
+    [data-testid="stAlert"] {
+        overflow-wrap: anywhere;
+    }
+
+    /* Sticky primary actions on small screens when marked by the app. */
+    .mobile-primary-action {
+        position: sticky;
+        bottom: .65rem;
+        z-index: 20;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 8px;
+        box-shadow: 0 8px 30px rgba(0,0,0,.14);
+    }
+}
+
+/* Very small phones */
+@media (max-width: 374px) {
+    .block-container {
+        padding-left: .7rem;
+        padding-right: .7rem;
+    }
+
+    .page-head h1,
+    h1 {
+        font-size: 1.42rem !important;
+    }
+
+    .kpi .value {
+        font-size: 1.32rem;
+    }
+
+    .vital-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+    }
+}
+
+/* Respect users who request reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        transition: none !important;
+        animation: none !important;
+        scroll-behavior: auto !important;
+    }
+}
+
 footer, #MainMenu { visibility: hidden; }
 """
 
@@ -1060,21 +1465,103 @@ def migrate_legacy() -> Optional[str]:
 # ============================================================
 # 4. MESIN AI & SINTESIS KLINIS (Diperbarui dengan Gemini API)
 # ============================================================
+def _weight_search_roots() -> list[Path]:
+    """Return predictable locations for deployed/local YOLO weight files."""
+    roots: list[Path] = []
+
+    # Explicit environment variable has highest priority.
+    env_path = os.environ.get("MAMMOUTH_MODEL_PATH") or os.environ.get("YOLO_MODEL_PATH")
+    if env_path:
+        roots.append(Path(env_path).expanduser())
+
+    # Directory containing app.py / this source file. This is important on
+    # Streamlit Cloud because the process working directory can differ.
+    try:
+        roots.append(Path(__file__).resolve().parent)
+    except Exception:
+        pass
+
+    roots.extend([
+        Path.cwd(),
+        DATA_DIR,
+        Path("models"),
+        Path("weights"),
+        Path("model"),
+        Path("MAMMOUTH"),
+    ])
+
+    # De-duplicate while preserving priority.
+    unique: list[Path] = []
+    seen: set[str] = set()
+    for root in roots:
+        key = str(root.resolve() if root.exists() else root.absolute())
+        if key not in seen:
+            seen.add(key)
+            unique.append(root)
+    return unique
+
+
 def find_weights(version: str) -> Optional[Path]:
-    for cand in MODEL_FILES.get(version, ["best.pt"]):
-        p = Path(cand)
-        if p.exists():
-            return p
+    """Find YOLO weights without assuming the current working directory."""
+    candidates = MODEL_FILES.get(version, ["best.pt"])
+
+    # Absolute path supplied through env var.
+    env_path = os.environ.get("MAMMOUTH_MODEL_PATH") or os.environ.get("YOLO_MODEL_PATH")
+    if env_path:
+        explicit = Path(env_path).expanduser()
+        if explicit.is_file():
+            return explicit.resolve()
+
+    for root in _weight_search_roots():
+        # If a root itself points to a file, compare its filename.
+        if root.is_file() and root.name in candidates:
+            return root.resolve()
+        for cand in candidates:
+            p = root / cand
+            if p.is_file():
+                return p.resolve()
+
     return None
+
 
 @st.cache_resource(show_spinner=False)
 def load_model(version: str, weight_path: str):
-    if YOLO is None or not weight_path:
-        return None
+    """Load the deployed checkpoint and return (model, error).
+
+    The error is returned instead of being written to session_state because
+    Streamlit resource caching can skip the function body on later reruns.
+    """
+    if YOLO is None:
+        return None, "Paket ultralytics belum terpasang."
+    if not weight_path:
+        return None, "Path bobot kosong."
     try:
-        return YOLO(weight_path)
-    except Exception:  # noqa: BLE001
-        return None
+        model = YOLO(weight_path)
+        return model, ""
+    except Exception as exc:  # noqa: BLE001
+        return None, f"{type(exc).__name__}: {exc}"
+
+
+def inspect_loaded_model(model, weights: Optional[Path]) -> dict:
+    """Return safe runtime metadata proving whether the checkpoint is loaded."""
+    if model is None:
+        return {"loaded": False, "task": "—", "classes": [], "count": 0, "size_mb": 0.0}
+    try:
+        names = getattr(model, "names", {}) or {}
+        if isinstance(names, dict):
+            classes = [str(v) for _, v in sorted(names.items())]
+        else:
+            classes = [str(v) for v in names]
+        return {
+            "loaded": True,
+            "task": str(getattr(model, "task", "unknown")),
+            "classes": classes,
+            "count": len(classes),
+            "size_mb": round(weights.stat().st_size / 1e6, 2) if weights and weights.is_file() else 0.0,
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"loaded": True, "task": "unknown", "classes": [], "count": 0,
+                "size_mb": 0.0, "inspect_error": str(exc)}
 
 def run_inference(model, image: Image.Image, conf: float, iou: float) -> tuple[list[dict], Optional[Image.Image]]:
     results = model(image, conf=conf, iou=iou, verbose=False)
@@ -1115,55 +1602,142 @@ def urgency_of(labels: list[str], severity: int = 0) -> str:
         rank = max(rank, 2)
     return RANK_URGENCY.get(rank, "Rendah") if rank else "Rendah"
 
-def synthesize(detections: list[dict], anam: dict) -> str:
-    if MODEL_AI is None:
+def _image_to_gemini_part(image: Optional[Image.Image]):
+    """Konversi citra PIL menjadi Part Gemini tanpa menulis API key atau data pasien ke log."""
+    if image is None or genai_types is None:
+        return None
+    try:
+        buf = io.BytesIO()
+        image.convert("RGB").save(buf, format="JPEG", quality=88, optimize=True)
+        return genai_types.Part.from_bytes(data=buf.getvalue(), mime_type="image/jpeg")
+    except Exception as exc:  # noqa: BLE001
+        global GEMINI_SDK_ERROR
+        GEMINI_SDK_ERROR = f"Gagal menyiapkan citra untuk Gemini: {type(exc).__name__}: {exc}"
+        return None
+
+def synthesize(detections: list[dict], anam: dict, image: Optional[Image.Image] = None) -> str:
+    """Sintesis klinis multimodal: citra + hasil YOLO + OLD CARTS melalui Gemini.
+
+    YOLO tetap menjadi detector/bounding-box engine MAMMOTH. Gemini dipakai untuk
+    menginterpretasikan konteks visual secara hati-hati dan menyusun sintesis,
+    bukan untuk menggantikan diagnosis dokter gigi.
+    """
+    global GEMINI_SDK_ERROR, GEMINI_LAST_STATUS
+    client = get_gemini_client()
+    if client is None:
+        GEMINI_LAST_STATUS = "Fallback lokal: Gemini tidak terkonfigurasi."
         return fallback_synthesize(detections, anam)
-        
+
     sev = int(anam.get("s_severity", 0) or 0)
     anam_payload = f"""
-    - Onset: {anam.get("o_onset", "-")}
-    - Lokasi: {anam.get("l_location", "-")}
-    - Durasi: {anam.get("d_duration", "-")}
-    - Karakteristik: {anam.get("c_character", "-")}
-    - Memperberat: {anam.get("a_aggravating", "-")}
-    - Meredakan: {anam.get("r_relieving", "-")}
-    - Skala Nyeri (VAS): {sev}/10
-    """
-    
+- Onset: {anam.get('o_onset', '-')}
+- Lokasi: {anam.get('l_location', '-')}
+- Durasi: {anam.get('d_duration', '-')}
+- Karakteristik: {anam.get('c_character', '-')}
+- Memperberat: {anam.get('a_aggravating', '-')}
+- Meredakan: {anam.get('r_relieving', '-')}
+- Waktu/pola: {anam.get('t_timing', '-')}
+- Skala Nyeri (VAS): {sev}/10
+"""
+
     if not detections:
-        distribusi = "Tidak ada lesi yang terdeteksi secara visual pada citra ini."
+        distribusi = "YOLO tidak menemukan objek/lesi di atas ambang keyakinan yang dipilih."
     else:
-        distribusi_list = []
-        for i, d in enumerate(detections):
-            distribusi_list.append(
-                f"Lesi {i+1}: Jenis '{d['label']}' (Keyakinan: {d['confidence']*100:.1f}%) pada rentang koordinat piksel x:[{d['x1']:.1f}-{d['x2']:.1f}], y:[{d['y1']:.1f}-{d['y2']:.1f}]"
-            )
-        distribusi = "\n".join(distribusi_list)
-        
+        distribusi = "\n".join(
+            f"Lesi {i+1}: {d['label']} | confidence={d['confidence']*100:.1f}% | "
+            f"bbox=(x1={d['x1']:.1f}, y1={d['y1']:.1f}, x2={d['x2']:.1f}, y2={d['y2']:.1f})"
+            for i, d in enumerate(detections)
+        )
+
     prompt = f"""
-    Anda adalah asisten AI klinis untuk sistem skrining kedokteran gigi (MAMMOUTH).
-    Berikan sintesis klinis dan suspek diagnosis berdasarkan korelasi dua set data berikut.
-    
-    DATA ANAMNESIS (OLD CARTS):
-    {anam_payload}
-    
-    HASIL DETEKSI VISUAL (Distribusi Gambar dari YOLO):
-    {distribusi}
-    
-    INSTRUKSI KETAT:
-    1. Berikan 1-2 kemungkinan suspek diagnosis.
-    2. Jelaskan alasannya dengan mengkorelasikan gejala dari anamnesis dengan lokasi dan jenis distribusi lesi pada gambar.
-    3. JANGAN PERNAH menyertakan atau membahas prevalensi statistik penyakit. Fokus HANYA pada data klinis dan distribusi gambar pasien ini.
-    4. Tulis dalam 1-2 paragraf singkat dan profesional berbahasa Indonesia.
-    """
-    
+Anda adalah MAMMOUTH Clinical AI Assistant untuk dukungan skrining rongga mulut.
+Anda menerima CITRA KLINIS, hasil object detection YOLO, dan anamnesis OLD CARTS.
+
+TUJUAN:
+Susun sintesis klinis singkat yang membantu dokter gigi menilai temuan, bukan menetapkan diagnosis definitif.
+
+ANAMNESIS OLD CARTS:
+{anam_payload}
+
+HASIL DETEKSI YOLO:
+{distribusi}
+
+ATURAN KLINIS DAN KESELAMATAN:
+1. Citra yang Anda lihat adalah sumber visual tambahan; jangan menganggap citra saja cukup untuk diagnosis.
+2. Perlakukan label dan confidence YOLO sebagai temuan model, bukan kebenaran klinis.
+3. Jangan mengarang riwayat, pemeriksaan, lokasi anatomi, ukuran, warna, tekstur, atau gejala yang tidak dapat didukung data.
+4. Jika visual tidak cukup jelas, katakan bahwa temuan tidak dapat dinilai secara pasti.
+5. Jika menyebut diagnosis banding/suspek, gunakan bahasa probabilistik seperti “mengarah ke”, “konsisten dengan”, atau “perlu dipertimbangkan”.
+6. Jangan memberikan keputusan terapi definitif, terutama tindakan invasif, hanya berdasarkan AI.
+7. Jangan menyebut prevalensi/statistik atau data pasien lain.
+8. Format jawaban: (a) Temuan AI, (b) Korelasi klinis, (c) Hal yang perlu dikonfirmasi dokter gigi.
+9. Maksimal 3 paragraf singkat, Bahasa Indonesia profesional.
+10. Akhiri dengan: “Hasil AI merupakan alat bantu skrining dan harus dikonfirmasi melalui pemeriksaan klinis langsung oleh dokter gigi.”
+"""
+
+    image_part = _image_to_gemini_part(image)
+    contents = [prompt]
+    if image_part is not None:
+        contents = [image_part, prompt]
+
     try:
-        response = MODEL_AI.generate_content(prompt)
-        if response and response.text:
-            return response.text.replace('\n', '<br>')
+        response = client.models.generate_content(
+            model=get_gemini_model_name(),
+            contents=contents,
+            config=genai_types.GenerateContentConfig(
+                temperature=0.2,
+                max_output_tokens=700,
+            ) if genai_types is not None else None,
+        )
+        text = (getattr(response, "text", None) or "").strip()
+        if text:
+            GEMINI_SDK_ERROR = None
+            GEMINI_LAST_STATUS = f"Gemini aktif · multimodal · {get_gemini_model_name()}"
+            return text.replace("\n", "<br>")
+        GEMINI_LAST_STATUS = "Gemini merespons tanpa teks; fallback lokal digunakan."
         return fallback_synthesize(detections, anam)
-    except Exception as e:
-        return f"Sintesis AI gagal (Error: {str(e)}). Menggunakan fallback statis: {fallback_synthesize(detections, anam)}"
+    except Exception as exc:  # noqa: BLE001
+        GEMINI_SDK_ERROR = f"{type(exc).__name__}: {exc}"
+        GEMINI_LAST_STATUS = "Request Gemini gagal; fallback lokal digunakan."
+        return fallback_synthesize(detections, anam)
+
+def test_gemini_connection() -> tuple[bool, str]:
+    """Tes request Gemini nyata tanpa menampilkan API key."""
+    global GEMINI_SDK_ERROR, GEMINI_LAST_STATUS
+    client = get_gemini_client()
+    if client is None:
+        GEMINI_LAST_STATUS = "Gemini tidak terkonfigurasi."
+        return False, GEMINI_SDK_ERROR or "Gemini belum terkonfigurasi."
+    import time
+
+    last_error = None
+    for attempt, delay in enumerate((0, 2, 5), start=1):
+        if delay:
+            time.sleep(delay)
+        try:
+            response = client.models.generate_content(
+                model=get_gemini_model_name(),
+                contents="Balas hanya dengan: MAMMOUTH_GEMINI_OK",
+                config=genai_types.GenerateContentConfig(temperature=0, max_output_tokens=20) if genai_types is not None else None,
+            )
+            text = (getattr(response, "text", None) or "").strip()
+            if text:
+                GEMINI_SDK_ERROR = None
+                GEMINI_LAST_STATUS = f"Gemini ONLINE · {get_gemini_model_name()} · attempt {attempt}"
+                return True, text
+            last_error = "Gemini merespons tanpa teks."
+        except Exception as exc:  # noqa: BLE001
+            last_error = f"{type(exc).__name__}: {exc}"
+            # 503/429/5xx are transient candidates; retry. Other errors return immediately.
+            code = getattr(exc, "status_code", None) or getattr(exc, "code", None)
+            msg = str(exc).lower()
+            transient = code in {429, 500, 502, 503, 504} or any(x in msg for x in ("503", "unavailable", "high demand", "429", "rate limit", "timeout"))
+            if not transient:
+                break
+
+    GEMINI_SDK_ERROR = last_error or "Gemini request gagal."
+    GEMINI_LAST_STATUS = "Gemini OFFLINE / request gagal setelah retry."
+    return False, GEMINI_SDK_ERROR
 
 def fallback_synthesize(detections: list[dict], anam: dict) -> str:
     sev = int(anam.get("s_severity", 0) or 0)
@@ -1756,8 +2330,8 @@ def page_screening(user: dict, model, weights: Optional[Path]) -> None:
     if demo:
         st.warning("Mode demo aktif. Kotak deteksi disimulasikan dan ditandai di rekam medis — jangan dipakai klinis.")
 
-    if MODEL_AI is None:
-        st.warning("Google Gemini API Key belum dikonfigurasi. Sintesis klinis akan menggunakan mode statis (Fallback).")
+    if genai is None or not get_gemini_api_key():
+        st.warning("Google Gemini belum siap. Sintesis klinis akan menggunakan fallback lokal sampai `google-genai` dan `GEMINI_API_KEY` tersedia.")
 
     pats = list_patients(user["id"])
     
@@ -1951,7 +2525,7 @@ def page_screening(user: dict, model, weights: Optional[Path]) -> None:
                 "annot_path": store_image(user["id"], exam_id, annotated, "anotasi"),
                 "max_conf": max([d["confidence"] for d in dets], default=0.0),
                 "urgency": urgency_of(labels, int(anam.get("s_severity", 0) or 0)),
-                "synthesis": synthesize(dets, anam),
+                "synthesis": synthesize(dets, anam, img),
                 "clinician_note": note.strip(),
                 "is_demo": 1 if demo else 0,
                 **anam,
@@ -2540,7 +3114,7 @@ def page_encyclopedia() -> None:
 # ============================================================
 # 14. HALAMAN: PENGATURAN
 # ============================================================
-def page_settings(user: dict, weights: Optional[Path]) -> None:
+def page_settings(user: dict, model, weights: Optional[Path]) -> None:
     page_head(_t("Settings"), "Profil, keamanan, model, dan pengelolaan data akun Anda.")
 
     t_prof, t_sec, t_model, t_data, t_about = st.tabs(
@@ -2591,17 +3165,62 @@ def page_settings(user: dict, weights: Optional[Path]) -> None:
     with t_model:
         with st.container(border=True):
             st.markdown("### Status runtime")
+            model_info = inspect_loaded_model(model, weights)
             rows = [
                 ("Paket ultralytics", "terpasang" if YOLO else "belum terpasang"),
-                ("Google Gemini API", "terhubung" if MODEL_AI else "belum terhubung"),
+                ("YOLO checkpoint", "LOADED / siap inferensi" if model_info["loaded"] else "GAGAL DIMUAT"),
+                ("Task model", model_info.get("task", "—")),
+                ("Jumlah kelas", str(model_info.get("count", 0))),
+                ("Ukuran bobot", f"{model_info.get('size_mb', 0):.2f} MB"),
+                ("Google Gemini API", "SDK + konfigurasi tersedia" if (genai is not None and get_gemini_api_key()) else "belum siap"),
                 ("Arsitektur aktif", st.session_state.model_version),
-                ("Berkas bobot", weights.name if weights else "tidak ditemukan"),
+                ("Berkas bobot", str(weights) if weights else "tidak ditemukan"),
                 ("Ambang keyakinan", f"{st.session_state.conf_thr:.2f}"),
                 ("Ambang IoU", f"{st.session_state.iou_thr:.2f}"),
             ]
             st.markdown("".join(
                 f"<div class='det-row'><span class='det-sub'>{k}</span><span class='det-name'>{v}</span></div>"
                 for k, v in rows), unsafe_allow_html=True)
+
+            if not weights:
+                st.warning(
+                    "`best.pt` belum ditemukan. Pastikan file bobot benar-benar ikut di-deploy ke repository "
+                    "atau set `MAMMOUTH_MODEL_PATH` ke path file `.pt` yang valid."
+                )
+                roots_txt = "\n".join(f"- `{r}`" for r in _weight_search_roots())
+                with st.expander("Lokasi yang diperiksa MAMMOUTH"):
+                    st.markdown(roots_txt)
+            elif not model_info["loaded"]:
+                st.error(f"`best.pt` ditemukan di server, tetapi checkpoint GAGAL dimuat: {st.session_state.get('model_load_error') or 'error tidak tersedia'}")
+                st.info("Ini berbeda dari masalah file tidak ditemukan. Kemungkinan terkait format checkpoint, versi Ultralytics/PyTorch, atau dependensi runtime.")
+            else:
+                st.success(f"✓ `best.pt` ditemukan dan berhasil dimuat sebagai model {model_info.get('task', 'unknown')} dengan {model_info.get('count', 0)} kelas.")
+                if model_info.get("classes"):
+                    with st.expander("Kelas yang dibaca dari best.pt"):
+                        st.code("\n".join(model_info["classes"]))
+
+            st.markdown("**Konfigurasi Gemini**")
+            gemini_key_present = bool(get_gemini_api_key())
+            st.markdown(
+                "".join([
+                    f"<div class='det-row'><span class='det-sub'>API key</span><span class='det-name'>{'terdeteksi' if gemini_key_present else 'tidak ditemukan'}</span></div>",
+                    f"<div class='det-row'><span class='det-sub'>SDK</span><span class='det-name'>{'google-genai' if genai is not None else 'belum terpasang'}</span></div>",
+                    f"<div class='det-row'><span class='det-sub'>Model</span><span class='det-name'>{get_gemini_model_name()}</span></div>",
+                ]),
+                unsafe_allow_html=True,
+            )
+            st.caption("Secrets yang didukung: `GEMINI_API_KEY` atau `GOOGLE_API_KEY`. Jangan masukkan key ke GitHub.")
+            st.caption(f"Status request: {GEMINI_LAST_STATUS}")
+            if GEMINI_SDK_ERROR:
+                with st.expander("Detail error Gemini", expanded=False):
+                    st.code(GEMINI_SDK_ERROR)
+            if st.button("Tes koneksi Gemini", key="test_gemini", use_container_width=True):
+                with st.spinner("Menghubungi Gemini…"):
+                    ok, msg = test_gemini_connection()
+                if ok:
+                    st.success(f"Gemini aktif. Respons: {msg}")
+                else:
+                    st.error(f"Gemini gagal dihubungi: {msg}")
 
             st.markdown("**Nama berkas yang dicari untuk tiap arsitektur**")
             for v, files in MODEL_FILES.items():
@@ -2728,7 +3347,8 @@ def main() -> None:
     st.session_state.user = user
 
     weights = find_weights(st.session_state.model_version)
-    model = load_model(st.session_state.model_version, str(weights) if weights else "")
+    model, model_load_error = load_model(st.session_state.model_version, str(weights) if weights else "")
+    st.session_state["model_load_error"] = model_load_error
     render_sidebar(user, weights)
 
     page = st.session_state.page
@@ -2745,7 +3365,7 @@ def main() -> None:
     elif page == "Lesion Database":
         page_encyclopedia()
     elif page == "Settings":
-        page_settings(user, weights)
+        page_settings(user, model, weights)
     else:
         page_dashboard(user)
 
