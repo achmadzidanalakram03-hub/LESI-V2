@@ -56,7 +56,7 @@ except Exception:  # pragma: no cover - dependency opsional saat mode demo
     genai = None
     genai_types = None
 
-GEMINI_DEFAULT_MODEL = "gemini-3.8-flash"
+GEMINI_DEFAULT_MODEL = "gemini-3.1-flash-lite"
 GEMINI_SDK_ERROR = None
 GEMINI_LAST_STATUS = "Belum ada request Gemini."
 
@@ -1502,26 +1502,78 @@ def _weight_search_roots() -> list[Path]:
 
 
 def find_weights(version: str) -> Optional[Path]:
-    """Find YOLO weights without assuming the current working directory."""
+    """Find YOLO weights robustly on local and Streamlit Cloud runtimes."""
     candidates = MODEL_FILES.get(version, ["best.pt"])
+    candidate_lower = {c.lower() for c in candidates}
 
-    # Absolute path supplied through env var.
     env_path = os.environ.get("MAMMOUTH_MODEL_PATH") or os.environ.get("YOLO_MODEL_PATH")
     if env_path:
         explicit = Path(env_path).expanduser()
         if explicit.is_file():
             return explicit.resolve()
 
-    for root in _weight_search_roots():
-        # If a root itself points to a file, compare its filename.
-        if root.is_file() and root.name in candidates:
+    roots = _weight_search_roots()
+    for root in roots:
+        if root.is_file() and root.name.lower() in candidate_lower:
             return root.resolve()
+        if not root.exists() or not root.is_dir():
+            continue
         for cand in candidates:
-            p = root / cand
-            if p.is_file():
-                return p.resolve()
+            direct = root / cand
+            if direct.is_file():
+                return direct.resolve()
 
+    skip_dirs = {".git", ".venv", "venv", "env", "__pycache__", "node_modules"}
+    seen: set[str] = set()
+    for root in roots:
+        if not root.exists() or not root.is_dir():
+            continue
+        try:
+            key = str(root.resolve())
+        except Exception:
+            key = str(root.absolute())
+        if key in seen:
+            continue
+        seen.add(key)
+        try:
+            for candidate in root.rglob("*.pt"):
+                if any(part in skip_dirs for part in candidate.parts):
+                    continue
+                if candidate.is_file() and candidate.name.lower() in candidate_lower:
+                    return candidate.resolve()
+        except (OSError, PermissionError):
+            continue
     return None
+
+
+def weight_diagnostics(version: str) -> dict:
+    """Return safe runtime diagnostics for checkpoint visibility."""
+    candidates = MODEL_FILES.get(version, ["best.pt"])
+    env_path = os.environ.get("MAMMOUTH_MODEL_PATH") or os.environ.get("YOLO_MODEL_PATH")
+    roots = _weight_search_roots()
+    found: list[dict] = []
+    seen: set[str] = set()
+    skip_dirs = {".git", ".venv", "venv", "env", "__pycache__", "node_modules"}
+    wanted = {c.lower() for c in candidates} | {"best.pt"}
+    for root in roots:
+        if not root.exists() or not root.is_dir():
+            continue
+        try:
+            for f in root.rglob("*.pt"):
+                if any(part in skip_dirs for part in f.parts) or not f.is_file():
+                    continue
+                key = str(f.resolve())
+                if key in seen or f.name.lower() not in wanted:
+                    continue
+                seen.add(key)
+                try:
+                    size = f.stat().st_size
+                except OSError:
+                    size = -1
+                found.append({"path": key, "name": f.name, "size_mb": round(size / 1e6, 3) if size >= 0 else -1})
+        except (OSError, PermissionError):
+            continue
+    return {"env_path": env_path or "", "roots": [str(r) for r in roots], "candidates": candidates, "found": found}
 
 
 @st.cache_resource(show_spinner=False)
@@ -3187,9 +3239,20 @@ def page_settings(user: dict, model, weights: Optional[Path]) -> None:
                     "`best.pt` belum ditemukan. Pastikan file bobot benar-benar ikut di-deploy ke repository "
                     "atau set `MAMMOUTH_MODEL_PATH` ke path file `.pt` yang valid."
                 )
-                roots_txt = "\n".join(f"- `{r}`" for r in _weight_search_roots())
-                with st.expander("Lokasi yang diperiksa MAMMOUTH"):
+                diag = weight_diagnostics(st.session_state.model_version)
+                roots_txt = "\n".join(f"- `{r}`" for r in diag["roots"])
+                with st.expander("Diagnostik lokasi bobot", expanded=True):
+                    st.markdown("**Nama yang dicari:** " + ", ".join(f"`{x}`" for x in diag["candidates"]))
+                    if diag["env_path"]:
+                        st.markdown(f"**MAMMOUTH_MODEL_PATH / YOLO_MODEL_PATH:** `{diag['env_path']}`")
+                    st.markdown("**Root yang diperiksa:**")
                     st.markdown(roots_txt)
+                    if diag["found"]:
+                        st.markdown("**Berkas `.pt` yang ditemukan:**")
+                        for item in diag["found"]:
+                            st.code(f"{item['path']}\nsize = {item['size_mb']:.3f} MB")
+                    else:
+                        st.error("Tidak ada berkas `.pt` yang ditemukan di runtime Streamlit. Pastikan `best.pt` benar-benar ada di repository/deployment dan tidak hanya ada di komputer lokal.")
             elif not model_info["loaded"]:
                 st.error(f"`best.pt` ditemukan di server, tetapi checkpoint GAGAL dimuat: {st.session_state.get('model_load_error') or 'error tidak tersedia'}")
                 st.info("Ini berbeda dari masalah file tidak ditemukan. Kemungkinan terkait format checkpoint, versi Ultralytics/PyTorch, atau dependensi runtime.")
